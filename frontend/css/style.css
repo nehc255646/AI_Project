@@ -1,0 +1,11 @@
+/* ── AI Chat Agent — Stylesheet ──
+ * Import order matters: variables → base → components → responsive
+ */
+@import "./variables.css";
+@import "./base.css";
+@import "./sidebar.css";
+@import "./slots.css";
+@import "./chat.css";
+@import "./modals.css";
+@import "./decorations.css";
+@import "./responsive.css";

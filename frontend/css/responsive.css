@@ -1,0 +1,164 @@
+/* ── 响应式 ── */
+
+/* 小桌面 / 平板横屏 */
+@media (max-width: 1024px) {
+  #slot-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    padding: 0 24px 36px;
+  }
+}
+
+@media (max-width: 900px) {
+  #slot-grid {
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0 20px 32px;
+    gap: 18px;
+  }
+}
+
+/* 平板竖屏 */
+@media (max-width: 768px) {
+  #sidebar-toggle {
+    display: flex;
+  }
+
+  #sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    width: min(320px, 85vw);
+    box-shadow: 4px 0 40px rgba(0, 0, 0, 0.6);
+    z-index: 99;
+  }
+  #sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay.active {
+    display: block;
+  }
+
+  #slot-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    padding: 0 16px 28px;
+  }
+
+  #slot-header {
+    padding: 28px 16px 24px;
+  }
+  .slot-header-title {
+    font-size: 20px;
+  }
+  .slot-header-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 26px;
+  }
+
+  .help-btn-top {
+    top: 14px;
+    right: 12px;
+    padding: 5px 14px;
+    font-size: 12px;
+  }
+
+  #chat-messages {
+    padding: 16px 14px;
+    gap: 16px;
+  }
+  .message {
+    max-width: 92%;
+  }
+  #chat-header {
+    padding: 12px 16px;
+  }
+  #input-area {
+    padding: 10px 14px 14px;
+  }
+}
+
+/* 手机 */
+@media (max-width: 480px) {
+  #slot-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 0 12px 24px;
+  }
+  .slot-card {
+    min-height: 160px;
+    padding: 16px 12px;
+  }
+
+  #slot-header {
+    padding: 24px 12px 20px;
+  }
+  .slot-header-title {
+    font-size: 18px;
+  }
+  .slot-header-icon {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+
+  .message {
+    max-width: 96%;
+  }
+  .message .bubble {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  #chat-messages {
+    padding: 12px 10px;
+    gap: 14px;
+  }
+
+  .wizard-content {
+    padding: 20px 18px 16px;
+  }
+  .modal-content {
+    padding: 20px 20px 20px;
+  }
+  .help-modal-body {
+    padding: 16px 18px;
+  }
+  .help-modal-header {
+    padding: 16px 18px 12px;
+  }
+
+  .params-grid {
+    max-height: 280px;
+  }
+}
+
+/* 打印 */
+@media print {
+  #sidebar,
+  #input-area,
+  #chat-header,
+  #slot-view,
+  #star-field,
+  #decorative-blobs,
+  #texture-overlay {
+    display: none !important;
+  }
+  #chat-messages {
+    overflow: visible;
+    height: auto;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    overflow: visible;
+  }
+  #app {
+    height: auto;
+  }
+  .message .bubble {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

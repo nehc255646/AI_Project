@@ -1,0 +1,705 @@
+/* ═══════════════════════════════════════════
+   装饰效果与视觉增强 — 宇宙暗色主题
+   ═══════════════════════════════════════════ */
+
+/* ── 1. 星场粒子背景 ── */
+#star-field {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* 第一层星星 — 较大，缓慢漂移 */
+#star-field::before {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: star-drift 10s linear infinite;
+  box-shadow:
+    120px 80px 2px rgba(255, 255, 255, 0.35),
+    340px 180px 2px rgba(167, 139, 250, 0.3),
+    560px 40px 1px rgba(255, 255, 255, 0.25),
+    780px 220px 2px rgba(167, 139, 250, 0.25),
+    150px 340px 1px rgba(255, 255, 255, 0.2),
+    420px 400px 2px rgba(167, 139, 250, 0.25),
+    680px 320px 1px rgba(255, 255, 255, 0.3),
+    900px 150px 2px rgba(167, 139, 250, 0.2),
+    200px 500px 1px rgba(255, 255, 255, 0.25),
+    500px 550px 2px rgba(167, 139, 250, 0.25),
+    820px 480px 1px rgba(255, 255, 255, 0.2),
+    1050px 300px 2px rgba(167, 139, 250, 0.25),
+    70px 620px 1px rgba(255, 255, 255, 0.2),
+    380px 700px 2px rgba(167, 139, 250, 0.2),
+    650px 650px 1px rgba(255, 255, 255, 0.25),
+    950px 580px 2px rgba(167, 139, 250, 0.25),
+    250px 800px 1px rgba(255, 255, 255, 0.2),
+    600px 850px 2px rgba(167, 139, 250, 0.2),
+    1100px 700px 1px rgba(255, 255, 255, 0.25),
+    80px 900px 2px rgba(167, 139, 250, 0.2),
+    450px 980px 1px rgba(255, 255, 255, 0.2),
+    750px 920px 2px rgba(167, 139, 250, 0.25),
+    1020px 880px 1px rgba(255, 255, 255, 0.2),
+    300px 1080px 2px rgba(167, 139, 250, 0.2),
+    880px 1050px 1px rgba(255, 255, 255, 0.25);
+  animation-delay: 0s;
+}
+
+/* 第二层星星 — 较小，较慢漂移，颜色偏蓝 */
+#star-field::after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  opacity: 0;
+  animation: star-drift-slow 14s linear infinite;
+  box-shadow:
+    90px 140px 1px rgba(255, 255, 255, 0.25),
+    280px 60px 1px rgba(147, 197, 253, 0.35),
+    490px 280px 1px rgba(255, 255, 255, 0.2),
+    710px 120px 1px rgba(147, 197, 253, 0.25),
+    920px 260px 1px rgba(255, 255, 255, 0.25),
+    180px 420px 1px rgba(147, 197, 253, 0.2),
+    460px 360px 1px rgba(255, 255, 255, 0.25),
+    730px 440px 1px rgba(147, 197, 253, 0.25),
+    1000px 400px 1px rgba(255, 255, 255, 0.2),
+    130px 560px 1px rgba(147, 197, 253, 0.25),
+    320px 620px 1px rgba(255, 255, 255, 0.2),
+    580px 530px 1px rgba(147, 197, 253, 0.3),
+    850px 600px 1px rgba(255, 255, 255, 0.25),
+    160px 720px 1px rgba(147, 197, 253, 0.2),
+    480px 780px 1px rgba(255, 255, 255, 0.25),
+    800px 740px 1px rgba(147, 197, 253, 0.2),
+    1080px 650px 1px rgba(255, 255, 255, 0.25),
+    220px 900px 1px rgba(147, 197, 253, 0.2),
+    550px 860px 1px rgba(255, 255, 255, 0.2),
+    920px 820px 1px rgba(147, 197, 253, 0.25),
+    40px 1020px 1px rgba(255, 255, 255, 0.2),
+    400px 960px 1px rgba(147, 197, 253, 0.25),
+    700px 1000px 1px rgba(255, 255, 255, 0.2),
+    1150px 950px 1px rgba(147, 197, 253, 0.25),
+    960px 1100px 1px rgba(255, 255, 255, 0.2);
+  animation-delay: 5s;
+}
+
+@keyframes star-drift {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-40px) scale(1.3); }
+}
+
+@keyframes star-drift-slow {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  8% { opacity: 0.8; }
+  92% { opacity: 0.8; }
+  100% { opacity: 0; transform: translateY(-30px) scale(1.2); }
+}
+
+/* ── 2. 装饰光晕 ── */
+#decorative-blobs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.1;
+  animation: blob-float 25s ease-in-out infinite;
+  will-change: transform;
+}
+
+.blob-1 {
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, #8b5cf6, transparent 65%);
+  top: -250px;
+  right: -200px;
+  animation-delay: 0s;
+  animation-duration: 28s;
+}
+
+.blob-2 {
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, #3b82f6, transparent 65%);
+  bottom: -200px;
+  left: -150px;
+  animation-delay: -10s;
+  animation-duration: 24s;
+}
+
+.blob-3 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #06b6d4, transparent 65%);
+  top: 50%;
+  left: 55%;
+  animation-delay: -16s;
+  animation-duration: 26s;
+  opacity: 0.06;
+}
+
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20% { transform: translate(40px, -50px) scale(1.08); }
+  40% { transform: translate(-30px, 30px) scale(0.95); }
+  60% { transform: translate(50px, 40px) scale(1.05); }
+  80% { transform: translate(-20px, -30px) scale(0.98); }
+}
+
+/* ── 3. 网格纹理叠加 ── */
+#texture-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.02;
+  background-image:
+    repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(255, 255, 255, 0.004) 2px, rgba(255, 255, 255, 0.004) 4px
+    ),
+    repeating-linear-gradient(
+      90deg, transparent, transparent 2px,
+      rgba(255, 255, 255, 0.004) 2px, rgba(255, 255, 255, 0.004) 4px
+    );
+}
+
+/* ── 4. 存档卡牌视觉增强 ── */
+.slot-card {
+  position: relative;
+  animation: card-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  overflow: hidden;
+}
+
+/* 光晕扫光效果 */
+.slot-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 35%,
+    transparent 65%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+.slot-card:hover::after { opacity: 1; }
+
+/* 已用卡片底部装饰线 */
+.slot-card.used::before {
+  content: "";
+  position: absolute;
+  bottom: 10px;
+  left: 30%;
+  right: 30%;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.4), rgba(59, 130, 246, 0.4), transparent);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+.slot-card.used:hover::before { opacity: 1; }
+
+/* 卡片入场动画错开 */
+.slot-card:nth-child(1) { animation-delay: 0.02s; }
+.slot-card:nth-child(2) { animation-delay: 0.04s; }
+.slot-card:nth-child(3) { animation-delay: 0.06s; }
+.slot-card:nth-child(4) { animation-delay: 0.08s; }
+.slot-card:nth-child(5) { animation-delay: 0.10s; }
+.slot-card:nth-child(6) { animation-delay: 0.12s; }
+.slot-card:nth-child(7) { animation-delay: 0.14s; }
+.slot-card:nth-child(8) { animation-delay: 0.16s; }
+.slot-card:nth-child(9) { animation-delay: 0.18s; }
+.slot-card:nth-child(10) { animation-delay: 0.20s; }
+
+@keyframes card-pop {
+  from { opacity: 0; transform: translateY(24px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── 5. 加载骨架屏 ── */
+.slot-card.skeleton {
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    var(--bg-surface) 30%,
+    rgba(255, 255, 255, 0.06) 50%,
+    var(--bg-surface) 70%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  border-color: transparent;
+}
+
+.slot-card.skeleton .skeleton-block {
+  width: 60%;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.slot-card.skeleton .skeleton-block:first-child {
+  width: 40%;
+  height: 16px;
+  margin-bottom: 8px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 6. 消息入场动画 ── */
+.message {
+  animation: message-in 0.4s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+.message:nth-child(1) { animation-delay: 0ms; }
+.message:nth-child(2) { animation-delay: 40ms; }
+.message:nth-child(3) { animation-delay: 80ms; }
+.message:nth-child(4) { animation-delay: 120ms; }
+
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.message.user { animation-name: message-in-user; }
+@keyframes message-in-user {
+  from { opacity: 0; transform: translateX(24px) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.message.assistant { animation-name: message-in-assistant; }
+@keyframes message-in-assistant {
+  from { opacity: 0; transform: translateX(-12px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ── 7. 用户气泡光晕增强 ── */
+.message.user .bubble {
+  position: relative;
+  overflow: hidden;
+}
+.message.user .bubble::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, transparent 50%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ── 8. AI 气泡悬停发光 ── */
+.message.assistant .bubble {
+  position: relative;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.message.assistant:hover .bubble {
+  border-color: rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.06), var(--ai-msg-shadow);
+}
+
+/* ── 9. 头像增强 ── */
+.message.user .avatar {
+  animation: user-avatar-glow 3s ease-in-out infinite;
+}
+@keyframes user-avatar-glow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3); }
+  50% { box-shadow: 0 2px 20px rgba(124, 58, 237, 0.55), 0 0 40px rgba(124, 58, 237, 0.15); }
+}
+
+.message.assistant .avatar {
+  transition: all var(--transition-fast);
+}
+.message.assistant:hover .avatar {
+  border-color: rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.15);
+}
+
+/* ── 10. 流式打字指示器 ── */
+.message.assistant .bubble.streaming::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 4px;
+  background: var(--accent-1);
+  border-radius: 50%;
+  animation: typing-dots 1.5s ease-in-out infinite;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+@keyframes typing-dots {
+  0%, 60%, 100% {
+    box-shadow:
+      7px 0 0 rgba(139, 92, 246, 0.2),
+      14px 0 0 rgba(139, 92, 246, 0.2);
+    transform: translateY(0);
+  }
+  20% {
+    box-shadow:
+      7px 0 0 rgba(139, 92, 246, 0.9),
+      14px 0 0 rgba(139, 92, 246, 0.2);
+    transform: translateY(-2px);
+  }
+  40% {
+    box-shadow:
+      7px 0 0 rgba(139, 92, 246, 0.2),
+      14px 0 0 rgba(139, 92, 246, 0.9);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── 11. 按钮微交互 ── */
+.send-btn {
+  position: relative;
+  overflow: hidden;
+}
+.send-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  border-radius: inherit;
+}
+.send-btn:hover:not(:disabled)::after { opacity: 1; }
+.send-btn:active:not(:disabled) { transform: scale(0.9); transition: transform 0.1s; }
+
+.icon-btn {
+  position: relative;
+  overflow: hidden;
+}
+.icon-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  border-radius: inherit;
+}
+.icon-btn:hover::after { opacity: 1; }
+
+.btn-secondary {
+  position: relative;
+  overflow: hidden;
+}
+.btn-secondary::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+  transition: left 0.6s ease;
+}
+.btn-secondary:hover::after { left: 100%; }
+
+/* ── 12. 输入区域聚焦发光 ── */
+.input-wrapper {
+  position: relative;
+}
+.input-wrapper:focus-within {
+  border-color: rgba(139, 92, 246, 0.5) !important;
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.1),
+    0 0 24px rgba(139, 92, 246, 0.08) !important;
+}
+
+/* 输入区域顶部渐变分割线 */
+#input-area {
+  position: relative;
+}
+#input-area::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 15%; right: 15%;
+  height: 1px;
+  background: linear-gradient(
+    90deg, transparent,
+    rgba(139, 92, 246, 0.25),
+    rgba(59, 130, 246, 0.25),
+    rgba(6, 182, 212, 0.15),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* ── 13. 代码块增强 ── */
+.bubble pre {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.bubble pre:hover {
+  border-color: rgba(139, 92, 246, 0.15);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.04);
+}
+.code-header { transition: background var(--transition-fast); }
+.bubble pre:hover .code-header { background: rgba(255, 255, 255, 0.05); }
+
+.copy-btn {
+  position: relative;
+  overflow: hidden;
+}
+.copy-btn::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.copy-btn:hover::after { opacity: 1; }
+
+/* ── 14. 标题动画渐变 ── */
+.slot-header-title {
+  background-size: 200% 200% !important;
+  animation: gradient-shift 8s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ── 15. 头部图标浮动 ── */
+.slot-header-icon {
+  animation: header-icon-float 5s ease-in-out infinite;
+}
+@keyframes header-icon-float {
+  0%, 100% { transform: translateY(0); box-shadow: var(--accent-glow); }
+  50% { transform: translateY(-8px); box-shadow: 0 0 40px rgba(139, 92, 246, 0.45); }
+}
+
+/* ── 16. Toast 增强 ── */
+.toast {
+  position: relative;
+  padding-left: 20px !important;
+}
+.toast::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 2px;
+}
+.toast-success::before { background: var(--success); }
+.toast-error::before { background: #ef4444; }
+.toast-info::before { background: var(--info); }
+.toast-warning::before { background: var(--warning); }
+
+/* ── 17. 弹窗背景动画 ── */
+.modal-overlay {
+  animation: overlay-fade-in 0.25s ease;
+}
+@keyframes overlay-fade-in {
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to { opacity: 1; backdrop-filter: blur(6px); }
+}
+
+.modal-content {
+  transform-origin: center;
+  animation: modal-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modal-enter {
+  from { opacity: 0; transform: scale(0.85) translateY(30px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── 18. 侧栏装饰 ── */
+.sidebar-header { position: relative; }
+.sidebar-header::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.25), transparent);
+}
+
+/* ── 19. 空状态图标增强 ── */
+.empty-icon {
+  animation: empty-glow 5s ease-in-out infinite;
+}
+@keyframes empty-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 60px rgba(139, 92, 246, 0.5);
+    transform: translateY(-10px) scale(1.05);
+  }
+}
+
+/* ── 20. 流式状态徽章 ── */
+.streaming-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.streaming-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: badge-pulse 1.2s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 10px 3px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* ── 21. 重新生成按钮旋转 ── */
+.regenerate-btn {
+  transition: all var(--transition-fast), transform 0.4s var(--transition-fast);
+}
+.regenerate-btn:hover {
+  transform: rotate(180deg) scale(1.15);
+}
+
+/* ── 22. 删除按钮晃动 ── */
+.slot-delete-btn { transition: all var(--transition-fast); }
+.slot-delete-btn:hover { animation: delete-shake 0.35s ease; }
+@keyframes delete-shake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-6deg); }
+  60% { transform: rotate(6deg); }
+}
+
+/* ── 23. 空状态标题渐变 ── */
+.empty-title {
+  background: linear-gradient(135deg, #f1f5f9, #a78bfa, #6366f1) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  background-size: 200% 200% !important;
+  animation: gradient-shift 6s ease-in-out infinite;
+}
+
+/* ── 24. 输入框占位符 ── */
+#message-input::placeholder {
+  color: rgba(148, 163, 184, 0.4);
+  transition: color var(--transition-fast);
+}
+#message-input:focus::placeholder {
+  color: rgba(148, 163, 184, 0.2);
+}
+
+/* ── 25. 取消流式按钮红色发光 ── */
+#cancel-stream-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+}
+
+/* ── 26. 发送按钮图标动画 ── */
+.send-btn svg {
+  transition: transform var(--transition-fast);
+}
+.send-btn:hover:not(:disabled) svg {
+  transform: translateX(3px) translateY(-3px);
+}
+
+/* ── 27. 视图切换入场 ── */
+#chat-view:not(.hidden) {
+  animation: view-appear 0.4s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+#slot-view:not(.hidden) {
+  animation: view-appear 0.45s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+}
+@keyframes view-appear {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 28. 确认按钮扫光 ── */
+.modal-btn-confirm {
+  position: relative;
+  overflow: hidden;
+}
+.modal-btn-confirm::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transition: left 0.5s ease;
+}
+.modal-btn-confirm:hover::after { left: 100%; }
+
+/* ── 29. 返回按钮悬停 ── */
+#back-to-slots-btn {
+  transition: all var(--transition-fast), box-shadow var(--transition-normal);
+}
+#back-to-slots-btn:hover {
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.4) !important;
+}
+
+/* ── 30. 侧栏分区装饰线 ── */
+.sidebar-section + .sidebar-section::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  margin-bottom: 16px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+}
+
+/* ── 31. 空卡牌加号旋转缩放 ── */
+.slot-card.empty .slot-plus {
+  transition: all var(--transition-spring);
+}
+.slot-card.empty:hover .slot-plus {
+  transform: scale(1.2) rotate(90deg);
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.25);
+}
+
+/* ── 32. 确保 app 在装饰层之上 ── */
+#app {
+  z-index: 1;
+}
+
+#texture-overlay,
+#decorative-blobs,
+#star-field {
+  pointer-events: none;
+}

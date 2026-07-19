@@ -1,0 +1,84 @@
+/* ── CSS Custom Properties — 宇宙暗色设计系统 ── */
+:root {
+  /* ── 背景层级 ── */
+  --bg-deepest: #05080f;
+  --bg-primary: #080c16;
+  --bg-secondary: #0d1424;
+  --bg-tertiary: #121b2e;
+  --bg-surface: rgba(255, 255, 255, 0.035);
+  --bg-surface-hover: rgba(255, 255, 255, 0.06);
+  --bg-surface-active: rgba(255, 255, 255, 0.09);
+
+  /* ── 玻璃拟态 ── */
+  --glass-bg: rgba(8, 14, 26, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-hover: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  --glass-blur: 24px;
+
+  /* ── 强调色 — 紫 → 蓝 → 青 渐变光谱 ── */
+  --accent-1: #8b5cf6;
+  --accent-2: #6366f1;
+  --accent-3: #3b82f6;
+  --accent-4: #06b6d4;
+  --accent-gradient: linear-gradient(135deg, #8b5cf6, #6366f1, #3b82f6);
+  --accent-gradient-2: linear-gradient(135deg, #8b5cf6, #a78bfa, #3b82f6, #06b6d4);
+  --accent-gradient-warm: linear-gradient(135deg, #a855f7, #ec4899);
+  --accent-glow: 0 0 24px rgba(139, 92, 246, 0.35);
+  --accent-glow-strong: 0 0 40px rgba(139, 92, 246, 0.5);
+
+  /* ── 文字 ── */
+  --text-primary: #f0f2f8;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-muted: #475569;
+  --text-on-accent: #ffffff;
+
+  /* ── 消息气泡 ── */
+  --user-msg-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #4f46e5 100%);
+  --user-msg-shadow: 0 4px 20px rgba(124, 58, 237, 0.35), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --ai-msg-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  --ai-msg-border: rgba(255, 255, 255, 0.07);
+  --ai-msg-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+
+  /* ── 代码块 ── */
+  --code-bg: #0a0e17;
+  --code-border: rgba(255, 255, 255, 0.06);
+
+  /* ── 状态色 ── */
+  --error-bg: rgba(239, 68, 68, 0.15);
+  --error-text: #fca5a5;
+  --error-border: rgba(239, 68, 68, 0.3);
+  --success: #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.15);
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.15);
+  --info: #3b82f6;
+
+  /* ── 尺寸 ── */
+  --sidebar-w: 320px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── 阴影预设 ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+  /* ── 过渡时长 ── */
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── 字体 ── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", "SF Mono", monospace;
+}

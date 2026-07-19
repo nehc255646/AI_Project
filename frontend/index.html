@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="theme-color" content="#0a0e17" />
+  <title>AI 对话智能体</title>
+
+  <!-- Fonts (external, keep in HTML) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- CSS is imported via JS (Vite handles bundling) -->
+</head>
+<body>
+  <!-- Decorative background layers (CSS-driven particles, blobs, texture) -->
+  <div id="star-field" aria-hidden="true"></div>
+  <div id="decorative-blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div id="texture-overlay" aria-hidden="true"></div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Confirmation Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-icon">⚠️</div>
+      <div class="modal-title">确认操作</div>
+      <div class="modal-message" id="modal-message">确定要执行此操作吗？</div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" id="modal-cancel">取消</button>
+        <button class="modal-btn modal-btn-confirm" id="modal-confirm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal-overlay hidden">
+    <div class="modal-content help-modal-content">
+      <div class="help-modal-header">
+        <div class="help-modal-icon">?</div>
+        <div class="help-modal-title">帮助与说明</div>
+        <button class="help-close-btn" id="help-close-btn" title="关闭">✕</button>
+      </div>
+      <div class="help-modal-body">
+        <section class="help-section help-section-highlight">
+          <h3 class="help-section-title">📖 快速开始</h3>
+          <ol class="help-list">
+            <li>在主页点击「<strong>+ 空存档</strong>」创建一个对话存档</li>
+            <li>选择一个 AI 模型（推荐 <strong>DeepSeek-v4-flash</strong>，需配置 API Key）</li>
+            <li>如果模型需要 API Key，填写密钥；如已在 <code>.env</code> 中设置则自动填充</li>
+            <li>可选：设置系统提示词来定制 AI 的角色和风格</li>
+            <li>在输入框输入消息，按 <kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</li>
+          </ol>
+        </section>
+
+        <section class="help-section">
+          <h3 class="help-section-title">🔑 模型说明</h3>
+          <div class="help-model-list">
+            <div class="help-model-item">
+              <div class="help-model-name">DeepSeek-v4-flash <span class="help-model-badge" style="background:#7c3aed">推荐</span></div>
+              <div class="help-model-desc">官网注册 → 创建 API Key → 配置环境变量 <code>DEEPSEEK_API_KEY=sk-xxxx</code><br>快速平衡，适合日常对话</div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">DeepSeek-v4-Pro</div>
+              <div class="help-model-desc">同上需 API Key，性能更强但速度稍慢，适合复杂任务</div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">通义千问（Qwen3.6-Flash / 3.7-Max）</div>
+              <div class="help-model-desc">阿里云开通 DashScope → 创建 API Key → 配置环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">Minimax-M3</div>
+              <div class="help-model-desc">通过 Ollama Cloud 调用，官方免费额度按周刷新。<br>前提：电脑上必须安装 <strong>Ollama</strong> 并保持后台运行（localhost:11434）</div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">Nemotron-3-Ultra</div>
+              <div class="help-model-desc">同上走 Ollama Cloud，需本地安装 Ollama 并开启服务</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="help-section">
+          <h3 class="help-section-title">💡 操作技巧</h3>
+          <ul class="help-list">
+            <li><strong>10 个存档位：</strong>每个存档独立绑定模型和提示词，互不干扰，可同时开启多段对话</li>
+            <li><strong>重新生成：</strong>鼠标悬停在 AI 回复上，点击 ↻ 按钮可重新生成该条回复，最后一条回复的 ↻ 按钮常亮显示</li>
+            <li><strong>编辑消息：</strong>鼠标悬停在自己的消息上，点击 ✏️ 按钮可编辑内容，保存后自动重新发送</li>
+            <li><strong>取消回复：</strong>AI 回复时可随时点击顶栏的 ■ 按钮取消</li>
+            <li><strong>导出对话：</strong>在侧栏点击「导出对话」可将整段对话保存为 Markdown</li>
+            <li><strong>环境变量：</strong>在项目根目录 <code>.env</code> 文件中配置，格式为 <code>DEEPSEEK_API_KEY=sk-xxx</code> 或 <code>DASHSCOPE_API_KEY=sk-xxx</code>，配置后创建存档会自动读取</li>
+          </ul>
+        </section>
+
+        <section class="help-section">
+          <h3 class="help-section-title">⌨️ 快捷键</h3>
+          <div class="help-shortcuts">
+            <div class="help-shortcut-row"><kbd>Enter</kbd><span>发送消息</span></div>
+            <div class="help-shortcut-row"><kbd>Shift</kbd> + <kbd>Enter</kbd><span>换行</span></div>
+            <div class="help-shortcut-row"><kbd>Ctrl</kbd> + <kbd>Enter</kbd><span>从任意位置发送</span></div>
+            <div class="help-shortcut-row"><kbd>Esc</kbd><span>关闭弹窗 / 侧栏</span></div>
+          </div>
+        </section>
+      </div>
+      <div class="help-modal-footer">
+        <button class="modal-btn modal-btn-confirm" id="help-got-it">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Slot Modal (3-step wizard) -->
+  <div id="create-modal" class="modal-overlay hidden">
+    <div class="modal-content wizard-content">
+      <!-- Step indicator -->
+      <div class="wizard-steps">
+        <div class="wizard-step active" data-step="1">
+          <span class="wizard-step-num">1</span>
+          <span class="wizard-step-label">选择模型</span>
+        </div>
+        <div class="wizard-step-connector"></div>
+        <div class="wizard-step" data-step="2">
+          <span class="wizard-step-num">2</span>
+          <span class="wizard-step-label">调整参数</span>
+        </div>
+        <div class="wizard-step-connector"></div>
+        <div class="wizard-step" data-step="3">
+          <span class="wizard-step-num">3</span>
+          <span class="wizard-step-label">设置提示词</span>
+        </div>
+      </div>
+
+      <!-- Step 1: Model selection + API Key -->
+      <div class="wizard-panel" id="wizard-step-1">
+        <div class="create-field">
+          <label class="create-label">AI 模型</label>
+          <div class="select-wrapper">
+            <select id="create-model-select"></select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+        <div class="create-field" id="api-key-field" style="display:none">
+          <label class="create-label" id="api-key-label">API 密钥</label>
+          <input type="password" id="create-api-key" class="create-input" placeholder="请输入 API Key" autocomplete="off" />
+          <p class="create-hint">密钥仅与此存档绑定，不会暴露给前端其他部分</p>
+        </div>
+      </div>
+
+      <!-- Step 2: Parameter configuration -->
+      <div class="wizard-panel hidden" id="wizard-step-2">
+        <p class="wizard-params-hint">调整 AI 生成参数，鼠标悬停可查看详细说明</p>
+        <div class="params-grid" id="params-grid">
+          <div class="param-item">
+            <label class="param-label" title="控制输出的随机性，值越高越有创意和变化">temperature</label>
+            <div class="param-control">
+              <input type="range" id="param-temperature" min="0" max="2" step="0.05" value="1.1" />
+              <span class="param-value" id="param-temperature-val">1.1</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="核采样阈值，控制考虑的词范围，值越小越保守">top_p</label>
+            <div class="param-control">
+              <input type="range" id="param-top-p" min="0" max="1" step="0.01" value="0.95" />
+              <span class="param-value" id="param-top-p-val">0.95</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="仅保留概率总和超过此阈值的最小词集合，配合 top_p 使用">min_p</label>
+            <div class="param-control">
+              <input type="range" id="param-min-p" min="0" max="1" step="0.01" value="0.1" />
+              <span class="param-value" id="param-min-p-val">0.1</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="只从概率最高的 K 个词中采样，值越小越确定">top_k</label>
+            <div class="param-control">
+              <input type="range" id="param-top-k" min="0" max="200" step="1" value="100" />
+              <span class="param-value" id="param-top-k-val">100</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="重复惩罚，值越高越不容易重复说同一句话">repeat_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param-repeat-penalty" min="0" max="2" step="0.01" value="1.25" />
+              <span class="param-value" id="param-repeat-penalty-val">1.25</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="存在惩罚，值越高越倾向于谈论新话题">presence_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param-presence-penalty" min="0" max="2" step="0.01" value="0.4" />
+              <span class="param-value" id="param-presence-penalty-val">0.4</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="频率惩罚，减少重复使用相同词汇">frequency_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param-frequency-penalty" min="0" max="2" step="0.01" value="0.0" />
+              <span class="param-value" id="param-frequency-penalty-val">0.0</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="模型上下文窗口大小（token 数），越大能记住越多内容但更耗显存">num_ctx</label>
+            <div class="param-control">
+              <select id="param-num-ctx" class="param-select">
+                <option value="4096">4K</option>
+                <option value="8192">8K</option>
+                <option value="16384">16K</option>
+                <option value="32768">32K</option>
+                <option value="65536">64K</option>
+                <option value="131072" selected>128K</option>
+                <option value="262144">256K</option>
+              </select>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="每次最多生成的 token 数，到达此值后停止生成">num_predict</label>
+            <div class="param-control">
+              <select id="param-num-predict" class="param-select">
+                <option value="512">512</option>
+                <option value="1024">1K</option>
+                <option value="2048">2K</option>
+                <option value="4096" selected>4K</option>
+                <option value="8192">8K</option>
+                <option value="16384">16K</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: System Prompt + 自定义标题 -->
+      <div class="wizard-panel hidden" id="wizard-step-3">
+        <div class="create-field">
+          <label class="create-label">存档标题</label>
+          <input type="text" id="create-title" class="create-input" placeholder="给存档取个名字（可选，留空自动生成）" />
+        </div>
+        <div class="create-field">
+          <label class="create-label">系统提示词</label>
+          <textarea id="create-system-prompt" class="wizard-prompt-input" placeholder="设定 AI 的角色、说话风格等…">使用中文回答</textarea>
+          <p class="create-hint">存档标题留空时将从系统提示词自动生成</p>
+        </div>
+      </div>
+
+      <!-- Navigation buttons -->
+      <div class="wizard-footer">
+        <button class="modal-btn modal-btn-cancel" id="wizard-prev" style="display:none">上一步</button>
+        <button class="modal-btn modal-btn-cancel" id="wizard-cancel">取消</button>
+        <div class="wizard-footer-right">
+          <button class="modal-btn modal-btn-confirm" id="wizard-next">下一步</button>
+          <button class="modal-btn modal-btn-confirm" id="wizard-create" style="display:none">创建存档</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- Sidebar overlay background (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- Sidebar (visible only in chat view) -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <span class="logo-icon">✦</span>
+          <span class="logo-text">存档信息</span>
+        </div>
+      </div>
+
+      <div class="sidebar-body">
+        <!-- Slot info (read-only) -->
+        <div class="sidebar-section">
+          <label class="section-label">存档编号</label>
+          <div id="slot-number-display" class="slot-id-badge">存档 #1</div>
+        </div>
+
+        <div class="sidebar-section">
+          <label class="section-label">存档标题</label>
+          <div class="title-display" id="slot-title-display">
+            <span id="slot-title-text" class="title-text" title="点击编辑标题">未命名</span>
+            <button id="slot-title-edit-btn" class="title-edit-btn" title="编辑标题">✏️</button>
+          </div>
+          <div class="title-edit-wrapper hidden" id="slot-title-edit-wrapper">
+            <input type="text" id="slot-title-input" class="title-input" maxlength="128" placeholder="输入存档标题" />
+            <div class="title-edit-actions">
+              <button id="title-save-btn" class="title-action-btn title-save-btn">保存</button>
+              <button id="title-cancel-btn" class="title-action-btn title-cancel-btn">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <label class="section-label">AI 模型</label>
+          <div class="model-display" id="slot-model-display">-</div>
+        </div>
+
+        <div class="sidebar-section">
+          <label class="section-label">系统提示词</label>
+          <div class="prompt-display" id="slot-prompt-display">-</div>
+        </div>
+
+        <!-- Actions -->
+        <button id="back-to-slots-btn" class="btn-secondary" style="border-color: rgba(124,58,237,0.25); color: #a78bfa;">
+          ← 返回存档选择
+        </button>
+
+        <button id="clear-slot-chat-btn" class="btn-secondary">
+          🗑 清空对话
+        </button>
+
+        <button id="export-chat-btn" class="btn-secondary">
+          📥 导出对话
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main area -->
+    <main id="main">
+      <!-- === Slot Grid View === -->
+      <div id="slot-view">
+        <header id="slot-header">
+          <button id="help-btn-slot" class="help-btn-top" title="帮助">❓ 帮助</button>
+          <div class="slot-header-content">
+            <div class="slot-header-icon">✦</div>
+            <h1 class="slot-header-title">AI 对话智能体</h1>
+            <p class="slot-header-desc">选择一个存档位开始对话</p>
+          </div>
+        </header>
+        <div id="slot-grid"></div>
+      </div>
+
+      <!-- === Chat View === -->
+      <div id="chat-view" class="hidden">
+        <header id="chat-header">
+          <button id="sidebar-toggle" class="icon-btn" title="打开侧栏">☰</button>
+          <div class="header-info">
+            <span id="chat-slot-badge" class="slot-badge"></span>
+            <span id="current-model-badge" class="model-badge"></span>
+          </div>
+          <div class="header-actions">
+            <span id="streaming-status-badge" class="streaming-badge hidden">回复中</span>
+            <button id="cancel-stream-btn" class="icon-btn header-action-btn hidden" title="取消回复">■</button>
+            <button id="help-btn-chat" class="icon-btn header-action-btn help-header-btn" title="帮助">❓</button>
+            <button id="back-to-slots-header-btn" class="icon-btn header-action-btn" title="返回存档选择">☰</button>
+          </div>
+        </header>
+
+        <div id="chat-messages">
+          <div class="empty-state">
+            <div class="empty-icon">✦</div>
+            <div class="empty-title">开始新的对话</div>
+            <div class="empty-desc">在下方输入消息，与 AI 开始交流</div>
+          </div>
+        </div>
+
+        <!-- Input area -->
+        <div id="input-area">
+          <div class="input-wrapper">
+            <textarea id="message-input" rows="1" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)"></textarea>
+            <button id="send-btn" class="send-btn" title="发送">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+          <div class="input-footer">
+            <span id="input-status" class="input-status">AI 可能会犯错，请验证重要信息</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Entry point — Vite resolves this into the bundle -->
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
