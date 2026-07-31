@@ -20,6 +20,14 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 OLLAMA_CLOUD_URL = "https://ollama.com/api/chat"
 
+# CORS 允许来源（逗号分隔，可通过 ALLOWED_ORIGINS 环境变量覆盖）
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if _raw_origins
+    else ["http://localhost:5173", "http://127.0.0.1:5173"]
+)
+
 # Limits
 CONTEXT_WINDOW_SIZE = 100   # 每次传给 AI 模型的消息数（上下文窗口）
 SLOT_COUNT = 10

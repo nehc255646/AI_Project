@@ -31,9 +31,11 @@ async function apiFetch(path, options = {}, retries = MAX_RETRIES) {
         detail = { message: `请求失败: ${res.status}` };
       }
 
-      // 4xx 错误不重试（客户端错误）
+      // 4xx 错误不重试（客户端错误），标记后抛出
       if (res.status >= 400 && res.status < 500) {
-        throw new Error(detail.message || detail.detail || `HTTP ${res.status}`);
+        const err = new Error(detail.message || detail.detail || `HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
       }
 
       // 5xx 错误重试
@@ -47,16 +49,19 @@ async function apiFetch(path, options = {}, retries = MAX_RETRIES) {
     } catch (e) {
       if (e.name === "AbortError") throw e;
 
-      // 网络断开/连接拒绝等 TypeError
-      if (e instanceof TypeError && e.message === "Failed to fetch") {
-        throw new Error("无法连接到服务器，请确认后端服务已启动");
-      }
+      // 4xx 客户端错误不重试
+      if (e.status && e.status >= 400 && e.status < 500) throw e;
 
-      // 指数退避重试
+      // 指数退避重试（网络断开、5xx 等临时故障）
       if (attempt < retries) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 4000);
         await sleep(delay);
         continue;
+      }
+
+      // 重试耗尽后给出友好提示
+      if (e instanceof TypeError && e.message === "Failed to fetch") {
+        throw new Error("无法连接到服务器，请确认后端服务已启动");
       }
       throw e;
     }

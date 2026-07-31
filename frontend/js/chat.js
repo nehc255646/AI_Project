@@ -6,7 +6,7 @@
 
 import { state } from "./state.js";
 import { apiGet, apiPost, apiDelete, apiPatch } from "./api.js";
-import { $, scrollToBottom } from "./utils.js";
+import { $, scrollToBottom, escapeHtml } from "./utils.js";
 import { showToast } from "./toast.js";
 import { showConfirm } from "./confirm.js";
 import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
@@ -145,6 +145,9 @@ export async function sendMessage() {
   let currentBubble = null;
   let bubbles = []; // [{el, role, fullContent, msgId, label}]
   let idleCheck = null;
+  let gotDone = false;      // 是否收到 done 事件
+  let errorHandled = false; // 是否已显示错误提示
+  let aborted = false;      // 本轮是否被取消/超时中断
 
   try {
     const response = await fetch("/api/chat", {
@@ -263,6 +266,7 @@ export async function sendMessage() {
 
             // ── 完成事件 ──
             case "done": {
+              gotDone = true;
               if (event.dual) {
                 userMessageId = event.user_message_id;
                 if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
@@ -313,6 +317,7 @@ export async function sendMessage() {
 
             // ── 错误处理 ──
             case "error": {
+              errorHandled = true;
               // 已有完成的模型气泡（已收到 model_done）且非补 Key 场景：
               // 后端会保留用户消息与已完成回复，前端仅移除失败模型的未完成气泡
               const completedBubbles = bubbles.filter(b => b.msgId);
@@ -349,7 +354,7 @@ export async function sendMessage() {
                   currentBubble = null;
                 }
                 // 本轮失败，后端会回滚数据库；移除用户消息气泡保持视觉一致
-                if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
+                if (userMsgDiv) userMsgDiv.remove();
               }
 
               if (code === "ollama_need_key") {
@@ -359,7 +364,7 @@ export async function sendMessage() {
                 const card = document.createElement("div");
                 card.className = "message error";
                 card.innerHTML = `<div class="bubble">
-                  <div style="margin-bottom:12px">⚠️ ${content || "无法连接"}</div>
+                  <div style="margin-bottom:12px">⚠️ ${escapeHtml(content || "无法连接")}</div>
                   <input type="password" id="ollama-key-input" class="create-input"
                     placeholder="输入 Ollama Cloud API Key" autocomplete="off"
                     style="margin-bottom:10px;width:100%" />
@@ -401,9 +406,10 @@ export async function sendMessage() {
   } catch (e) {
     if (idleCheck !== null) clearInterval(idleCheck);
     if (state.streamCancelled || e.name === "AbortError") {
-      rollbackMessages(text);
-      showToast("已取消", "info");
+      // 取消/超时：统一在 finally 中回滚本轮气泡并提示
+      aborted = true;
     } else {
+      errorHandled = true;
       bubbles.forEach(b => {
         if (b.el) {
           const d = getMsgDiv(b.el);
@@ -416,13 +422,17 @@ export async function sendMessage() {
         if (d) d.remove();
         currentBubble = null;
       }
-      if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
+      if (userMsgDiv) userMsgDiv.remove();
       addErrorMessage(`请求失败: ${e.message}`, text);
     }
   } finally {
+    // 手动取消（streamCancelled）与超时中断（aborted）都需回滚本轮气泡；
+    // 手动取消时额外提示一次，超时已有独立提示
     if (state.streamCancelled) {
       rollbackMessages(text);
       showToast("已取消", "info");
+    } else if (aborted) {
+      rollbackMessages(text);
     }
   }
 
@@ -433,6 +443,10 @@ export async function sendMessage() {
       state.dualEnabled = state.currentSlotData.dual_enabled || false;
       state.responseMode = state.currentSlotData.response_mode || "both";
       state.firstModel = state.currentSlotData.first_model || "model1";
+      // 取消/超时中断时后端已回滚数据库，用最新数据重建 DOM 保持一致性
+      if (!gotDone && !errorHandled) {
+        renderMessages(state.currentSlotData.history || []);
+      }
       updateSidebarInfo();
     } catch (_) { /* 静默失败 */ }
   }

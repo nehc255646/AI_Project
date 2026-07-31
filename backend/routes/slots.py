@@ -122,7 +122,7 @@ def delete_messages(slot_index: int, req: DeleteMessageRequest):
             error("delete_failed", "删除消息失败", 500)
         return {"ok": True}
 
-    # Legacy: 按数组下标删除
+    # Legacy: 按数组下标删除（通过消息 ID 精确删除，不影响其余消息 ID）
     data = resolve_slot(slot_index)
     history: list = data.get("history", [])
     total = len(history)
@@ -136,9 +136,14 @@ def delete_messages(slot_index: int, req: DeleteMessageRequest):
             400,
         )
 
-    new_history = history[: req.from_index] + history[req.to_index + 1 :]
-    mgr.save_slot_history(slot_index, new_history)
-    return {"ok": True, "deleted": req.to_index - req.from_index + 1}
+    ids_to_delete = [
+        m["id"] for m in history[req.from_index: req.to_index + 1] if m.get("id")
+    ]
+    if not ids_to_delete:
+        error("delete_failed", "无法定位要删除的消息", 500)
+    if not mgr.delete_messages_by_ids(slot_index, ids_to_delete):
+        error("delete_failed", "删除消息失败", 500)
+    return {"ok": True, "deleted": len(ids_to_delete)}
 
 
 @router.patch("/api/slots/{slot_index}/chat/messages")
@@ -157,13 +162,16 @@ def edit_message(slot_index: int, req: EditMessageRequest):
             error("message_not_found", f"消息 #{req.message_id} 不存在", 404)
         return {"ok": True}
 
-    # Legacy: 按下标编辑
+    # Legacy: 按下标编辑（通过消息 ID 更新，保持其余消息 ID 不变）
     data = resolve_slot(slot_index)
     history: list = data.get("history", [])
     if req.index is None or req.index < 0 or req.index >= len(history):
         error("invalid_index", f"消息索引 {req.index} 无效", 400)
-    history[req.index]["content"] = req.content
-    mgr.save_slot_history(slot_index, history)
+    target = history[req.index]
+    if not target.get("id"):
+        error("message_not_found", "无法定位消息 ID", 404)
+    if not mgr.update_message_content(target["id"], req.content):
+        error("message_not_found", f"消息 #{target['id']} 不存在", 404)
     return {"ok": True}
 
 
