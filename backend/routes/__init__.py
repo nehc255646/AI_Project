@@ -1,1 +1,1 @@
-"""Route modules for the AI Chat Agent API."""
+"""AI 对话智能体 API 的路由模块。"""

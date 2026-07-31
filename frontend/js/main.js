@@ -1,13 +1,11 @@
 /**
- * Application entry point.
- *
- * Imports CSS, wires up event listeners, and initialises state.
+ * 应用入口 — 引入样式、绑定事件监听并初始化状态。
  */
 
-// ── Import CSS (Vite bundles these) ──
+// ── 引入样式（由 Vite 打包） ──
 import "../css/style.css";
 
-// ── State ──
+// ── 状态 ──
 import { state } from "./state.js";
 
 // ── API ──
@@ -21,19 +19,19 @@ import {
   closeSidebar,
 } from "./ui.js";
 
-// ── Modals ──
+// ── 弹窗 ──
 import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal } from "./modals.js";
 
-// ── Chat ──
+// ── 对话 ──
 import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode } from "./chat.js";
 
-// ── Utils ──
+// ── 工具 ──
 import { $ } from "./utils.js";
 
-// ── Toast ──
+// ── 轻提示 ──
 import { showToast } from "./toast.js";
 
-// ── Init ──
+// ── 初始化 ──
 
 async function init() {
   await loadModels();
@@ -55,7 +53,7 @@ async function loadModels() {
     });
     updateApiKeyField();
   } catch (_) {
-    // Fallback：后端不可用时的兜底列表，需与 backend/config.py 的 MODEL_CONFIG 保持一致
+    // 兜底：后端不可用时的备用模型列表，需与 backend/config.py 的 MODEL_CONFIG 保持一致
     const fallback = [
       { key: "Minimax-M3", provider: "ollama" },
       { key: "Nemotron-3-Ultra", provider: "ollama" },
@@ -81,41 +79,41 @@ async function loadEnvStatus() {
   }
 }
 
-// ── Wire DOM event listeners ──
+// ── 绑定 DOM 事件监听 ──
 
 function setupEventListeners() {
-  // Sidebar toggle
+  // 侧边栏开关
   $("#sidebar-toggle").addEventListener("click", openSidebar);
   $("#sidebar-overlay").addEventListener("click", closeSidebar);
 
-  // Navigation
+  // 导航
   $("#back-to-slots-btn").addEventListener("click", backToSlots);
   $("#back-to-slots-header-btn").addEventListener("click", backToSlots);
   $("#clear-slot-chat-btn").addEventListener("click", clearSlotChat);
 
-  // Export
+  // 导出
   $("#export-chat-btn").addEventListener("click", openExportModal);
 
-  // Help
+  // 帮助
   $("#help-btn-slot").addEventListener("click", openHelpModal);
   $("#help-btn-chat").addEventListener("click", openHelpModal);
   $("#help-close-btn").addEventListener("click", closeHelpModal);
   $("#help-got-it").addEventListener("click", closeHelpModal);
 
-  // Send
+  // 发送
   $("#send-btn").addEventListener("click", sendMessage);
 
-  // Cancel stream
+  // 取消流式回复
   $("#cancel-stream-btn").addEventListener("click", cancelStream);
 
-  // Input: auto-resize
+  // 输入框自动增高
   $("#message-input").addEventListener("input", () => {
     const el = $("#message-input");
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   });
 
-  // Input: Enter to send, Escape to blur
+  // Enter 发送，Escape 失焦
   $("#message-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -126,39 +124,39 @@ function setupEventListeners() {
     }
   });
 
-  // Global: Escape key
+  // 全局 Escape 键
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
 
-    // Close help modal
+    // 关闭帮助弹窗
     const helpModal = document.getElementById("help-modal");
     if (!helpModal.classList.contains("hidden")) {
       closeHelpModal();
       return;
     }
 
-    // Close create modal
+    // 关闭创建弹窗
     const createModal = document.getElementById("create-modal");
     if (!createModal.classList.contains("hidden")) {
       closeCreateModal();
       return;
     }
 
-    // Close confirmation modal
+    // 关闭确认弹窗
     const confirmOverlay = document.getElementById("modal-overlay");
     if (!confirmOverlay.classList.contains("hidden")) {
       confirmOverlay.classList.add("hidden");
       return;
     }
 
-    // Close sidebar
+    // 关闭侧边栏
     const sidebar = document.getElementById("sidebar");
     if (sidebar.classList.contains("open")) {
       closeSidebar();
     }
   });
 
-  // Global: Ctrl+Enter / Cmd+Enter to send from any textarea
+  // 全局 Ctrl/Cmd + Enter 发送（任意文本域）
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
       const active = document.activeElement;
@@ -168,10 +166,10 @@ function setupEventListeners() {
     }
   });
 
-  // Initialise modal listeners
+  // 初始化弹窗监听
   initModalListeners();
 
-  // Event delegation: regenerate button clicks — uses data-user-msg-id
+  // 事件委托：重新生成按钮点击（依据 data-user-msg-id）
   document.getElementById("chat-messages").addEventListener("click", (e) => {
     const btn = e.target.closest(".regenerate-btn");
     if (!btn) return;
@@ -179,7 +177,7 @@ function setupEventListeners() {
     if (!isNaN(userMsgId)) regenerate(userMsgId);
   });
 
-  // ── Dual mode: response mode radio ──
+  // ── 双模型：回复模式单选框 ──
   document.querySelectorAll('input[name="response-mode"]').forEach((radio) => {
     radio.addEventListener("change", (e) => {
       const mode = e.target.value;
@@ -197,7 +195,7 @@ function setupEventListeners() {
     });
   });
 
-  // ── Title editing ──
+  // ── 标题编辑 ──
 
   function enterTitleEdit() {
     const curTitle = state.currentSlotData?.title || "";
@@ -237,16 +235,16 @@ function setupEventListeners() {
     }
   }
 
-  // Click title or edit button → enter edit mode
+  // 点击标题或编辑按钮进入编辑
   document.getElementById("slot-title-display").addEventListener("click", enterTitleEdit);
 
-  // Save button
+  // 保存按钮
   document.getElementById("title-save-btn").addEventListener("click", saveTitle);
 
-  // Cancel button
+  // 取消按钮
   document.getElementById("title-cancel-btn").addEventListener("click", () => exitTitleEdit(false));
 
-  // Enter → save, Escape → cancel
+  // Enter 保存，Escape 取消
   document.getElementById("slot-title-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -257,7 +255,7 @@ function setupEventListeners() {
   });
 }
 
-// ── Bootstrap
+// ── 启动 ──
 
 document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();

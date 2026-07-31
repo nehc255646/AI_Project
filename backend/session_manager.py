@@ -1,7 +1,7 @@
 """
-Slot Manager — MySQL 存储实现。
+Slot Manager — 基于 MySQL 的对话存档存储实现。
 
-将对话存档从 JSON 文件迁移到 MySQL，对外接口保持不变。
+提供存档的增删改查、消息追加与删除等数据库操作。
 """
 import datetime
 import json

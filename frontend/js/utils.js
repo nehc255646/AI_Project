@@ -1,11 +1,8 @@
 /**
- * Shared utility functions.
- *
- * DOM shortcuts and chat scroll.
- * Toast → toast.js, Confirm → confirm.js, Markdown → markdown.js
+ * 通用工具函数 — DOM 快捷操作、HTML 转义与聊天滚动。
  */
 
-// ── DOM shortcuts ──
+// ── DOM 快捷操作 ──
 
 export const $ = (sel) => document.querySelector(sel);
 export const $$ = (sel) => document.querySelectorAll(sel);
@@ -21,7 +18,7 @@ export function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-// ── Chat scroll ──
+// ── 聊天滚动 ──
 
 export function scrollToBottom(smooth = true) {
   const el = document.getElementById("chat-messages");

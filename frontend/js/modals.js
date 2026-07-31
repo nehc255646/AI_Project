@@ -1,8 +1,5 @@
 /**
- * Modal management.
- *
- * Create-slot modal (supports single + dual mode wizard),
- * export modal, and API-key field logic.
+ * 弹窗管理 — 创建存档向导（单/双模型）、导出弹窗与 API Key 字段联动。
  */
 
 import { state } from "./state.js";
@@ -11,7 +8,7 @@ import { showToast } from "./toast.js";
 import { loadSlots } from "./ui.js";
 import { openSlot } from "./chat.js";
 
-// ── Create Slot Modal ──
+// ── 创建存档弹窗 ──
 
 export let pendingCreateIndex = null;
 let currentStep = 0;
@@ -146,7 +143,7 @@ export async function openCreateModal(index) {
   document.getElementById("step1-icon").textContent = "🤖";
   document.getElementById("step1-title").textContent = "选择模型";
 
-  // Populate model selects
+  // 填充模型下拉框
   populateModelSelect("create-model-select", "DeepSeek-v4-flash");
   populateModelSelect("create-model2-select", "DeepSeek-v4-flash");
 
@@ -252,7 +249,7 @@ export function updateApiKeyField2() {
   }
 }
 
-// ── Export modal ──
+// ── 导出弹窗 ──
 
 export async function openExportModal() {
   const idx = state.currentSlotIndex;
@@ -321,7 +318,7 @@ export async function openExportModal() {
   }
 }
 
-// ── Help Modal ──
+// ── 帮助弹窗 ──
 
 export function openHelpModal() {
   document.getElementById("help-modal").classList.remove("hidden");
@@ -331,7 +328,7 @@ export function closeHelpModal() {
   document.getElementById("help-modal").classList.add("hidden");
 }
 
-// ── Init modal event listeners ──
+// ── 初始化弹窗事件监听 ──
 
 function syncSystemPromptSource() {
   // 仅双模型模式同步（单模型模式的提示词在 step3 单独输入，不可被覆盖）
@@ -354,9 +351,9 @@ export function initModalListeners() {
         document.getElementById("field-model1-name").style.display = "block";
         document.getElementById("step1-icon").textContent = MODEL1_ICON;
         document.getElementById("step1-title").textContent = "模型 1 配置";
-        // Step 2 显示模型1系统提示词
+        // 步骤 2 显示模型 1 系统提示词
         document.getElementById("step2-prompt-field").style.display = "";
-        // Step 3 显示模型2配置
+        // 步骤 3 显示模型 2 配置
         document.getElementById("step3-single").style.display = "none";
         document.getElementById("step3-dual").style.display = "block";
         document.getElementById("step3-icon").textContent = MODEL2_ICON;
@@ -366,7 +363,7 @@ export function initModalListeners() {
         document.getElementById("field-model1-name").style.display = "none";
         document.getElementById("step1-icon").textContent = "🤖";
         document.getElementById("step1-title").textContent = "选择模型";
-        // Step 2 隐藏系统提示词（单模型的提示词在 Step 3）
+        // 步骤 2 隐藏系统提示词（单模型的提示词在步骤 3）
         document.getElementById("step2-prompt-field").style.display = "none";
         document.getElementById("step3-single").style.display = "";
         document.getElementById("step3-dual").style.display = "none";
@@ -387,7 +384,7 @@ export function initModalListeners() {
         showStep(1);
       }
     } else if (currentStep === 1) {
-      // Step 1 → Step 2（校验API Key）
+      // 步骤 1 → 步骤 2（校验 API Key）
       const apiKeyField = document.getElementById("api-key-field");
       const apiKeyInput = document.getElementById("create-api-key");
       if (apiKeyField.style.display !== "none" && !apiKeyInput.value.trim()) {
@@ -481,7 +478,7 @@ export function initModalListeners() {
         showToast("创建失败: " + e.message, "error");
       }
     } else {
-      // ── 单模型创建（原有逻辑） ──
+      // ── 单模型创建 ──
       const select = document.getElementById("create-model-select");
       const promptInput = document.getElementById("create-system-prompt-single");
       const apiKeyInput = document.getElementById("create-api-key");

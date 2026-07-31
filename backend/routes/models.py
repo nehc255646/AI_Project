@@ -1,5 +1,5 @@
 """
-Models route — list available models, environment status, and default parameters.
+模型路由 — 提供可用模型列表、环境状态与默认生成参数。
 """
 from __future__ import annotations
 

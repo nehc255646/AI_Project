@@ -1,5 +1,5 @@
 """
-Shared helpers for route modules.
+路由模块共享的辅助函数。
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from state import get_slot_mgr
 
 
 def error(code: str, message: str, status: int = 400, detail: str = "") -> None:
-    """Raise a structured HTTPException."""
+    """抛出结构化错误（HTTPException）。"""
     raise HTTPException(
         status_code=status,
         detail={"code": code, "message": message, "detail": detail},
@@ -18,7 +18,7 @@ def error(code: str, message: str, status: int = 400, detail: str = "") -> None:
 
 
 def resolve_slot(slot_index: int) -> dict:
-    """Ensure a slot exists and return its data."""
+    """校验存档位是否存在并返回其数据。"""
     if slot_index < 0 or slot_index >= SLOT_COUNT:
         error("invalid_slot", f"存档位 {slot_index} 无效（0-{SLOT_COUNT - 1}）", 400)
     data = get_slot_mgr().get_slot(slot_index)
@@ -39,7 +39,7 @@ def validate_model_key(model_key: str) -> dict:
 
 
 def check_api_key(provider: str, api_key: str) -> None:
-    """Validate API key requirements."""
+    """校验 API Key 是否已配置（Ollama 除外，连接失败时再提示）。"""
     from config import DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, OLLAMA_API_KEY
 
     # Ollama 创建时不要求 Key，连接失败时再说

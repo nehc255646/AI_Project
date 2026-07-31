@@ -1,7 +1,7 @@
 """
-FastAPI server — AI Chat Agent.
+FastAPI 服务入口 — AI 对话智能体。
 
-Entry point: sets up middleware, registers routers, serves static files.
+负责初始化中间件、注册路由并托管前端静态文件。
 """
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ app.include_router(chat_router)
 app.include_router(models_router)
 
 
-# ── Global exception handler for structured errors (#14) ──
+# ── 全局异常处理器（返回结构化错误） ──
 
 
 @app.exception_handler(HTTPException)
@@ -104,7 +104,7 @@ async def generic_exception_handler(request, exc: Exception):
 
 
 # ── Serve frontend static files ──
-# Priority: dist/ (Vite production build) → frontend/ (dev / raw)
+# 优先使用 dist/（Vite 生产构建），其次使用 frontend/ 源文件
 dist_dir = FRONTEND_DIR / "dist"
 if dist_dir.is_dir() and list(dist_dir.iterdir()):
     app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="frontend")

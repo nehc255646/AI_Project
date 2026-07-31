@@ -1,7 +1,5 @@
 /**
- * API helper functions with automatic retry.
- *
- * Uses exponential backoff for transient failures.
+ * API 请求封装 — 自动重试，对临时故障采用指数退避。
  */
 
 const API_BASE = "";
@@ -23,7 +21,7 @@ async function apiFetch(path, options = {}, retries = MAX_RETRIES) {
         return res.json();
       }
 
-      // Structured error handling
+      // 结构化错误解析
       let detail;
       try {
         detail = await res.json();

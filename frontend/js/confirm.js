@@ -1,5 +1,5 @@
 /**
- * Confirmation modal.
+ * 确认弹窗。
  */
 export function showConfirm(message, danger = false) {
   return new Promise((resolve) => {

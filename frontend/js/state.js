@@ -1,8 +1,6 @@
 /**
- * Global application state.
- *
- * Centralised so modules can share state without DOM queries or
- * passing values through call chains.
+ * 全局应用状态 — 集中管理，供各模块共享，
+ * 避免跨模块依赖 DOM 查询或层层传参。
  */
 
 export const state = {
@@ -12,8 +10,8 @@ export const state = {
   currentSlotData: null,
   streaming: false,
   abortController: null,
-  currentReader: null,     // SSE reader，用于直接取消
-  streamCancelled: false,  // 取消标志（双重保障）
+  currentReader: null,     // SSE 读取器，用于直接取消
+  streamCancelled: false,  // 取消标志
   models: [],
   envStatus: {},
   // 双模型状态

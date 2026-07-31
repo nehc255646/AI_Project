@@ -1,5 +1,5 @@
 /**
- * Toast notifications.
+ * 轻提示通知。
  */
 export function showToast(message, type = "info", duration = 3000) {
   const container = document.getElementById("toast-container");

@@ -1,5 +1,5 @@
 /**
- * Markdown rendering and code-block enhancement.
+ * Markdown 渲染与代码块增强（复制按钮、语法高亮）。
  */
 import { marked } from "marked";
 import hljs from "highlight.js/lib/core";
@@ -40,7 +40,7 @@ hljs.registerLanguage("rust", rust);
 hljs.registerLanguage("yaml", yaml);
 hljs.registerLanguage("markdown", markdownLang);
 
-// ── Configure marked ──
+// ── 配置 marked ──
 
 marked.setOptions({
   gfm: true,
@@ -49,16 +49,16 @@ marked.setOptions({
     if (lang && hljs.getLanguage(lang)) {
       try {
         return hljs.highlight(code, { language: lang }).value;
-      } catch (_) { /* fall through */ }
+      } catch (_) { /* 继续后续逻辑 */ }
     }
     try {
       return hljs.highlightAuto(code).value;
-    } catch (_) { /* fall through */ }
+    } catch (_) { /* 继续后续逻辑 */ }
     return code;
   },
 });
 
-// ── Render ──
+// ── 渲染 ──
 
 const DISALLOWED_TAGS = new Set([
   "script", "style", "iframe", "object", "embed", "link", "meta", "base",
@@ -114,7 +114,7 @@ export function renderMarkdown(text) {
   }
 }
 
-// ── Code-block enhancement (copy button) ──
+// ── 代码块增强（复制按钮） ──
 
 export function enhanceCodeBlocks(container) {
   container.querySelectorAll("pre").forEach((pre) => {
@@ -157,10 +157,10 @@ export function enhanceCodeBlocks(container) {
     pre.parentNode.insertBefore(header, pre);
   });
 
-  // Re-highlight
+  // 重新高亮
   container.querySelectorAll("pre code").forEach((block) => {
     try {
       hljs.highlightElement(block);
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* 忽略 */ }
   });
 }

@@ -1,4 +1,4 @@
-"""Pydantic request / response models."""
+"""Pydantic 请求 / 响应模型。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-# ── Request models ──
+# ── 请求模型 ──
 
 
 class ChatRequest(BaseModel):
@@ -44,32 +44,32 @@ class DualToggleRequest(BaseModel):
 
 
 class DeleteMessageRequest(BaseModel):
-    """Delete a range of messages.
+    """删除指定范围的消息。
 
-    Supports two modes:
-      - from_id: delete from this message ID onward (preferred)
-      - from_index / to_index: delete by array index (legacy)
+    支持两种模式：
+      - from_id：从该消息 ID 起全部删除（优先）
+      - from_index / to_index：按数组下标删除（兼容旧调用）
     """
 
     from_index: Optional[int] = None
     to_index: Optional[int] = None
-    from_id: Optional[int] = None  # New: 按消息 ID 删除
+    from_id: Optional[int] = None  # 按消息 ID 删除（优先）
 
 
 class EditMessageRequest(BaseModel):
-    """Edit a message.
+    """编辑一条消息。
 
-    Supports two modes:
-      - message_id: target by stable message ID (preferred)
-      - index: target by array index (legacy)
+    支持两种模式：
+      - message_id：按消息 ID 定位（优先）
+      - index：按数组下标定位（兼容旧调用）
     """
 
     index: Optional[int] = None
-    message_id: Optional[int] = None  # New: 按消息 ID
+    message_id: Optional[int] = None  # 按消息 ID 定位（优先）
     content: str
 
 
-# ── Response models ──
+# ── 响应模型 ──
 
 
 class SlotDetail(BaseModel):
@@ -89,15 +89,15 @@ class SlotDetail(BaseModel):
 
 
 class ApiError(BaseModel):
-    """Structured error response."""
+    """结构化错误响应。"""
 
-    code: str  # machine-readable
-    message: str  # human-readable in Chinese
+    code: str  # 机器可读的错误码
+    message: str  # 人类可读的中文提示
     detail: str = ""
 
 
 class ExportData(BaseModel):
-    """Conversation export payload."""
+    """对话导出数据。"""
 
     title: str
     model: str

@@ -1,11 +1,8 @@
 """
-AI Client layer — async OpenAI-compatible streaming for multiple providers.
+AI 客户端层 — 面向 DeepSeek / DashScope / Ollama 的异步流式对话调用。
 
-Changes:
-  - AsyncOpenAI for non-blocking I/O (fix #5)
-  - Unified _stream_openai_compatible for DeepSeek / DashScope (fix #3)
-  - Ollama health-check with 30 s cooldown cache (fix #4)
-  - Retry logic for transient OpenAI API failures
+支持 OpenAI 兼容接口的流式请求、Ollama 健康检查（30 秒冷却缓存）
+以及 API 临时故障的自动重试。
 """
 import asyncio
 import json
@@ -30,7 +27,7 @@ from config import (
 logger = logging.getLogger(__name__)
 
 _OLLAMA_CHECK_CACHE: dict = {"ok": False, "at": 0.0}
-_OLLAMA_CACHE_TTL = 30  # seconds
+_OLLAMA_CACHE_TTL = 30  # 冷却时间（秒）
 
 # API 调用重试配置
 _API_RETRY_MAX = 2
@@ -77,7 +74,7 @@ class AIClient:
             )
         return self._dashscope
 
-    # ── Ollama health check with cooldown cache (#4) ──
+    # ── Ollama 健康检查（带冷却缓存） ──
 
     async def _check_ollama(self) -> bool:
         now = time.time()
@@ -97,13 +94,13 @@ class AIClient:
         _OLLAMA_CHECK_CACHE["at"] = now
         return ok
 
-    # ── Public entry: async generator (#5) ──
+    # ── 对外入口：流式对话 ──
 
     async def stream_chat(
         self, messages: List[Dict], model_key: str, api_key: str = "",
         max_tokens: int | None = None, params: dict | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Async generator yielding response text chunks (SSE-friendly)."""
+        """异步生成器，逐块产出回复文本（适配 SSE）。"""
         cfg = MODEL_CONFIG.get(model_key)
         if not cfg:
             raise ValueError(f"不支持的模型: {model_key}")
@@ -134,7 +131,7 @@ class AIClient:
             ):
                 yield chunk
 
-    # ── Unified OpenAI-compatible streaming (#3) ──
+    # ── OpenAI 兼容接口流式调用 ──
 
     async def _stream_openai_compatible(
         self,
@@ -180,9 +177,8 @@ class AIClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        # 带重试的 API 调用。
-        # 注意：仅"请求阶段"可重试；流一旦开始输出内容后若中断，
-        # 直接失败（重试会导致已输出内容与重新生成的内容重复拼接）。
+        # 仅"请求阶段"可重试；流开始输出内容后若中断直接失败，
+        # 避免重试导致已输出内容与重新生成的内容重复拼接。
         last_exception = None
         started = False
         for attempt in range(_API_RETRY_MAX + 1):
@@ -241,7 +237,7 @@ class AIClient:
         # 所有重试耗尽
         raise ConnectionError(f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}")
 
-    # ── Ollama streaming (kept separate due to different API shape) ──
+    # ── Ollama 流式调用（接口格式不同，单独实现） ──
 
     async def _stream_ollama(
         self, messages: List[Dict], model_id: str,

@@ -1,7 +1,7 @@
 """
-Chat route — SSE streaming for conversation.
+对话路由 — 基于 SSE 流式的对话接口。
 
-支持单模型和双模型（多角色）对话模式。
+支持单模型与双模型（多角色）两种对话模式。
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def _auto_title(slot_index: int, system_prompt: str) -> str:
 
 @router.post("/api/chat")
 async def chat(req: ChatRequest):
-    """SSE streaming chat — 接收 JSON，返回流式响应。"""
+    """流式对话 — 接收 JSON，返回 SSE 流式响应。"""
     data = resolve_slot(req.slot_index)
 
     history: list = data.get("history", [])
@@ -78,7 +78,7 @@ async def chat(req: ChatRequest):
             user_msg_id = None
             msg_ids = []
 
-            # ── 单模型模式（原有逻辑） ──
+            # ── 单模型模式 ──
             if not dual_enabled or (not run_model1 and not run_model2):
                 # 退化为单模型（未开启双模型，或双模型无有效回复模式）
                 actual_model = model

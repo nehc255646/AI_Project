@@ -1,5 +1,5 @@
 """
-Slots route — CRUD for conversation slots.
+存档路由 — 对话存档的增删改查接口。
 """
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def get_slot_chat(slot_index: int):
 
 @router.post("/api/slots/{slot_index}/chat/clear")
 def clear_slot_chat(slot_index: int):
-    resolve_slot(slot_index)  # ensure exists
+    resolve_slot(slot_index)  # 校验存档存在
     mgr = get_slot_mgr()
     mgr.clear_all_messages(slot_index)
     return {"ok": True}
@@ -110,7 +110,7 @@ def delete_messages(slot_index: int, req: DeleteMessageRequest):
     """删除消息。
 
     优先使用 from_id（按消息 ID 删除），
-    回退到 from_index / to_index（按数组下标，旧版兼容）。
+    回退到 from_index / to_index（按数组下标删除）。
     """
     mgr = get_slot_mgr()
 
@@ -122,7 +122,7 @@ def delete_messages(slot_index: int, req: DeleteMessageRequest):
             error("delete_failed", "删除消息失败", 500)
         return {"ok": True}
 
-    # Legacy: 按数组下标删除（通过消息 ID 精确删除，不影响其余消息 ID）
+    # 按数组下标删除（通过消息 ID 精确定位，不影响其余消息 ID）
     data = resolve_slot(slot_index)
     history: list = data.get("history", [])
     total = len(history)
@@ -162,7 +162,7 @@ def edit_message(slot_index: int, req: EditMessageRequest):
             error("message_not_found", f"消息 #{req.message_id} 不存在", 404)
         return {"ok": True}
 
-    # Legacy: 按下标编辑（通过消息 ID 更新，保持其余消息 ID 不变）
+    # 按下标编辑（通过消息 ID 更新，保持其余消息 ID 不变）
     data = resolve_slot(slot_index)
     history: list = data.get("history", [])
     if req.index is None or req.index < 0 or req.index >= len(history):

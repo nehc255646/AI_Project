@@ -1,8 +1,6 @@
 /**
- * UI rendering functions.
- *
- * Handles view switching, slot grid rendering, message rendering,
- * sidebar updates, and streaming status indicator.
+ * UI 渲染函数 — 视图切换、存档网格、消息渲染、
+ * 侧边栏更新与流式状态指示。
  */
 
 import { state } from "./state.js";
@@ -13,13 +11,13 @@ import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
 import { openCreateModal } from "./modals.js";
 import { deleteSlotAction, openSlot, editAndResend, setDualResponseMode } from "./chat.js";
 
-// ── DOM refs ──
+// ── DOM 引用 ──
 
 function el(id) {
   return document.getElementById(id);
 }
 
-// ── View switching ──
+// ── 视图切换 ──
 
 export function showSlotView() {
   state.view = "slots";
@@ -37,7 +35,7 @@ export function showChatView() {
   updateSidebarInfo();
 }
 
-// ── Slot grid ──
+// ── 存档网格 ──
 
 export async function loadSlots() {
   try {
@@ -112,7 +110,7 @@ export function renderSlotGrid() {
   }
 }
 
-// ── Chat messages ──
+// ── 聊天消息 ──
 
 export function showEmptyState() {
   const container = el("chat-messages");
@@ -229,7 +227,7 @@ export function addMessage(role, content, isStreaming = false, messageId = null,
     contentDiv.innerHTML = renderMarkdown(content);
     enhanceCodeBlocks(contentDiv);
   }
-  // streaming: contentDiv 留空，流式写入
+  // 流式输出时 contentDiv 留空，边流边写
 
   bubble.appendChild(contentDiv);
 
@@ -261,7 +259,7 @@ export function finishStreaming(bubble) {
   }
 }
 
-// ── Sidebar ──
+// ── 侧边栏 ──
 
 export function updateSidebarInfo() {
   const idx = state.currentSlotIndex;
@@ -353,7 +351,7 @@ export function closeSidebar() {
   el("sidebar-overlay").classList.remove("active");
 }
 
-// ── Streaming status indicator ──
+// ── 流式状态指示 ──
 
 export function setStreaming(val) {
   state.streaming = val;
@@ -376,7 +374,7 @@ export function setStreaming(val) {
   if (messageInput) messageInput.disabled = val;
 }
 
-// ── Add error message to chat ──
+// ── 在聊天区添加错误提示 ──
 
 export function addErrorMessage(content, retryText = null) {
   const container = el("chat-messages");

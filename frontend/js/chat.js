@@ -1,7 +1,5 @@
 /**
- * Chat logic — send, receive SSE stream, regenerate, abort.
- *
- * Support for dual-mode (multi-role) streaming.
+ * 对话逻辑 — 发送消息、接收 SSE 流、重新生成与取消，支持双模型流式对话。
  */
 
 import { state } from "./state.js";
@@ -35,7 +33,7 @@ function getMsgDiv(bubble) {
   return bubble ? bubble.closest(".message") : null;
 }
 
-// ── Open a slot ──
+// ── 打开存档 ──
 
 export async function openSlot(index) {
   state.currentSlotIndex = index;
@@ -54,7 +52,7 @@ export async function openSlot(index) {
   }
 }
 
-// ── Delete a slot ──
+// ── 删除存档 ──
 
 export async function deleteSlotAction(index) {
   const confirmed = await showConfirm(
@@ -76,7 +74,7 @@ export async function deleteSlotAction(index) {
   }
 }
 
-// ── Back to slot view ──
+// ── 返回存档视图 ──
 
 export function backToSlots() {
   if (state.streaming) {
@@ -91,7 +89,7 @@ export function backToSlots() {
   showSlotView();
 }
 
-// ── Clear chat ──
+// ── 清空对话 ──
 
 export async function clearSlotChat() {
   if (state.streaming) {
@@ -121,7 +119,7 @@ export async function clearSlotChat() {
   }
 }
 
-// ── Send message (SSE, JSON) ──
+// ── 发送消息（SSE 流式，JSON 请求） ──
 
 export async function sendMessage() {
   const input = document.getElementById("message-input");
@@ -165,7 +163,7 @@ export async function sendMessage() {
       try {
         const err = await response.json();
         errMsg = err.message || errMsg;
-      } catch (_) { /* ignore */ }
+      } catch (_) { /* 忽略 */ }
       throw new Error(errMsg);
     }
 
@@ -399,7 +397,7 @@ export async function sendMessage() {
               break;
             }
           }
-        } catch (_) { /* ignore parse errors */ }
+        } catch (_) { /* 忽略解析错误 */ }
       }
     }
 
@@ -484,7 +482,7 @@ function rollbackMessages(text) {
   }
 }
 
-// ── Regenerate (单模型，双模型禁用) ──
+// ── 重新生成（仅单模型） ──
 
 export async function regenerate(userMsgId) {
   if (state.streaming) return;
@@ -530,13 +528,13 @@ export async function regenerate(userMsgId) {
   sendMessage();
 }
 
-// ── Cancel stream ──
+// ── 取消流式回复 ──
 
 export function cancelStream() {
   if (!state.streaming) return;
   state.streamCancelled = true;
   if (state.currentReader) {
-    try { state.currentReader.cancel(); } catch (_) { /* ignore */ }
+    try { state.currentReader.cancel(); } catch (_) { /* 忽略 */ }
     state.currentReader = null;
   }
   if (state.abortController) {
@@ -545,7 +543,7 @@ export function cancelStream() {
   }
 }
 
-// ── Edit user message ──
+// ── 编辑用户消息 ──
 
 export function editAndResend(msgElement) {
   if (state.streaming) {
@@ -673,7 +671,7 @@ export async function setDualResponseMode(mode, firstModel) {
   }
 }
 
-// ── Helper: close sidebar ──
+// ── 辅助：关闭侧边栏 ──
 
 function closeSidebar() {
   const sidebar = document.getElementById("sidebar");

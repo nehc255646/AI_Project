@@ -2,21 +2,21 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Paths
+# 路径
 BASE_DIR = Path(__file__).parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 # 从项目根目录加载 .env（而非 backend/ 下）
 load_dotenv(BASE_DIR.parent / ".env")
 
-# API Keys
+# API 密钥
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
 OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-# Ollama
+# Ollama 服务
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 OLLAMA_CLOUD_URL = "https://ollama.com/api/chat"
 
@@ -28,7 +28,7 @@ ALLOWED_ORIGINS = (
     else ["http://localhost:5173", "http://127.0.0.1:5173"]
 )
 
-# Limits
+# 限制
 CONTEXT_WINDOW_SIZE = 100   # 每次传给 AI 模型的消息数（上下文窗口）
 SLOT_COUNT = 10
 
@@ -63,7 +63,7 @@ DEFAULT_PARAMS = {
     "num_predict": 4096,
 }
 
-# Model definitions
+# 模型定义
 MODEL_CONFIG = {
     "DeepSeek-v4-flash": {
         "id": "deepseek-v4-flash",

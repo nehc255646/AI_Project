@@ -1,9 +1,8 @@
 """
-Application state — shared globals for route modules.
-Initialized by main.py's lifespan handler, imported by route modules.
+应用全局状态 — 由 main.py 启动时初始化，供各路由模块共享。
 
-NOTE: Route modules MUST use get_*() functions (not direct from-import of
-the module-level variables) to ensure they read the live value set by init().
+注意：路由模块必须通过 get_*() 函数读取实例，
+不能直接导入模块级变量，以确保拿到 init() 设置的最新值。
 """
 from __future__ import annotations
 
