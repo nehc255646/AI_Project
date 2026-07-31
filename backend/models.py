@@ -16,12 +16,32 @@ class ChatRequest(BaseModel):
     message: str = ""
 
 
+class DualModelConfig(BaseModel):
+    """双模型配置 — 第二模型的所有信息。"""
+    model: str = "DeepSeek-v4-flash"
+    system_prompt: str = "使用中文回答"
+    api_key: str = ""
+    params: Optional[dict] = None
+
+
 class CreateSlotRequest(BaseModel):
     model: str = "DeepSeek-v4-flash"
     system_prompt: str = "使用中文回答"
     api_key: str = ""
     title: str = ""  # 自定义标题，为空则后端自动生成
     params: Optional[dict] = None  # 生成参数，为空则使用后端默认值
+    # 双模型字段
+    dual_enabled: bool = False
+    model1_name: str = ""
+    model2_name: str = ""
+    model2: Optional[DualModelConfig] = None
+    pass_mode: str = "user"  # "user" | "assistant" — 另一模型消息以什么角色传入
+
+
+class DualToggleRequest(BaseModel):
+    """切换双模型的回复模式。"""
+    response_mode: str = "both"  # "model1" | "model2" | "both"
+    first_model: str = "model1"  # "model1" | "model2" 谁先回复
 
 
 class DeleteMessageRequest(BaseModel):
@@ -59,9 +79,14 @@ class SlotDetail(BaseModel):
     system_prompt: str
     created_at: str
     updated_at: str
-    history: list = []  # [{id, role, content}, ...]
+    history: list = []  # [{id, role, content, source}, ...]
     title: str = ""
     params: Optional[dict] = None
+    # 双模型信息
+    dual_enabled: bool = False
+    dual_config: Optional[dict] = None
+    response_mode: str = "both"
+    first_model: str = "model1"
 
 
 class ApiError(BaseModel):

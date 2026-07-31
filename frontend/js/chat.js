@@ -1,22 +1,12 @@
 /**
  * Chat logic — send, receive SSE stream, regenerate, abort.
  *
- * Changes:
- *   - 移除了文件上传功能
- *   - 改用 JSON POST（取代 FormData）
- *   - 流式渲染使用增量 textContent（修复 O(n²)）
- *   - SSE done 事件返回 user_message_id / assistant_message_id
- *   - regenerate 使用消息 ID 定位（取代脆弱的 DOM 位置计数）
- *   - 编辑消息也使用 data-message-id
- *   - 移除了 getHistoryIndex()
+ * Support for dual-mode (multi-role) streaming.
  */
 
 import { state } from "./state.js";
 import { apiGet, apiPost, apiDelete, apiPatch } from "./api.js";
-import {
-  $,
-  scrollToBottom,
-} from "./utils.js";
+import { $, scrollToBottom } from "./utils.js";
 import { showToast } from "./toast.js";
 import { showConfirm } from "./confirm.js";
 import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
@@ -33,6 +23,18 @@ import {
   loadSlots,
 } from "./ui.js";
 
+/** 从 .bubble 中获取文本内容容器 */
+function getContent(bubble) {
+  if (!bubble) return null;
+  // 如果有 label bar，内容在 .bubble-content 中
+  return bubble.querySelector(".bubble-content") || bubble;
+}
+
+/** 获取 .bubble 所在的 .message */
+function getMsgDiv(bubble) {
+  return bubble ? bubble.closest(".message") : null;
+}
+
 // ── Open a slot ──
 
 export async function openSlot(index) {
@@ -41,6 +43,9 @@ export async function openSlot(index) {
   try {
     const data = await apiGet(`/api/slots/${index}/chat`);
     state.currentSlotData = data;
+    state.dualEnabled = data.dual_enabled || false;
+    state.responseMode = data.response_mode || "both";
+    state.firstModel = data.first_model || "model1";
     showChatView();
     renderMessages(data.history || []);
     showToast("已进入存档 #" + (index + 1), "success");
@@ -80,6 +85,7 @@ export function backToSlots() {
   }
   state.currentSlotIndex = null;
   state.currentSlotData = null;
+  state.dualEnabled = false;
   document.getElementById("chat-messages").innerHTML = "";
   closeSidebar();
   showSlotView();
@@ -127,17 +133,19 @@ export async function sendMessage() {
   input.value = "";
   input.style.height = "auto";
 
+  const isDual = state.dualEnabled;
+
   // 添加用户消息气泡
-  addMessage("user", text, false);
+  const userMsgBubble = addMessage("user", text, false);
+  const userMsgDiv = userMsgBubble ? userMsgBubble.closest(".message") : null;
 
   setStreaming(true);
   state.abortController = new AbortController();
   state.streamCancelled = false;
   state.currentReader = null;
 
-  // 添加 AI 占位气泡
-  const bubble = addMessage("assistant", "", true);
-  const msgDiv = bubble ? bubble.closest(".message") : null;
+  let currentBubble = null;
+  let bubbles = []; // [{el, role, fullContent, msgId, label}]
   let idleCheck = null;
 
   try {
@@ -164,7 +172,6 @@ export async function sendMessage() {
     state.currentReader = reader;
     const decoder = new TextDecoder();
     let buffer = "";
-    let fullContent = "";
     let lastChunkTime = Date.now();
     const IDLE_TIMEOUT = 60_000;
     idleCheck = setInterval(() => {
@@ -176,7 +183,6 @@ export async function sendMessage() {
     }, 10_000);
 
     let userMessageId = null;
-    let assistantMessageId = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -198,67 +204,146 @@ export async function sendMessage() {
           const { type, content, code } = event;
 
           switch (type) {
-            case "chunk":
-              fullContent += content;
-              // 增量写入 textContent（避免 O(n²)）
-              bubble.textContent += content;
+            // ── 双模型：模型开始回复 ──
+            case "model_start": {
+              const name = event.name || "";
+              const icon = event.icon || "🤖";
+              currentBubble = addMessage("assistant", "", true, null,
+                icon ? `${icon} ${name}`.trim() : name);
+              bubbles.push({
+                el: currentBubble,
+                role: event.role,
+                fullContent: "",
+                msgId: null,
+                label: `${icon} ${name}`.trim(),
+              });
               scrollToBottom();
               break;
+            }
 
-            case "done":
-              userMessageId = event.user_message_id;
-              assistantMessageId = event.assistant_message_id;
-
-              // 标记消息 ID
-              // 用户消息是倒数第二个 .message （刚刚添加的）
-              const allMsgs = document.querySelectorAll("#chat-messages > .message");
-              const userDiv = allMsgs[allMsgs.length - 2];
-              if (userDiv && userMessageId) {
-                userDiv.dataset.messageId = userMessageId;
+            // ── 流式数据块 ──
+            case "chunk": {
+              let entry = null;
+              if (currentBubble) {
+                entry = bubbles[bubbles.length - 1];
               }
-              if (msgDiv && assistantMessageId) {
-                msgDiv.dataset.messageId = assistantMessageId;
+              if (!entry) {
+                // 单模型：首次 chunk 时创建气泡
+                const bubble = addMessage("assistant", "", true);
+                entry = { el: bubble, role: null, fullContent: "", msgId: null, label: null };
+                bubbles.push(entry);
+                currentBubble = bubble;
               }
+              entry.fullContent += content;
+              const contentDiv = getContent(entry.el);
+              if (contentDiv) {
+                contentDiv.textContent += content;
+              }
+              scrollToBottom();
+              break;
+            }
 
-              // Markdown 渲染完成
-              bubble.innerHTML = renderMarkdown(fullContent);
-              enhanceCodeBlocks(bubble);
-              finishStreaming(bubble);
-
-              // 添加重试按钮
-              if (msgDiv && userMessageId) {
-                let regenBtn = msgDiv.querySelector(".regenerate-btn");
-                if (!regenBtn) {
-                  regenBtn = document.createElement("button");
-                  regenBtn.className = "regenerate-btn";
-                  regenBtn.textContent = "↻";
-                  regenBtn.title = "重新生成";
-                  msgDiv.appendChild(regenBtn);
+            // ── 双模型：单个模型完成 ──
+            case "model_done": {
+              const entry = bubbles.find(b => b.role === event.role || b.el === currentBubble);
+              if (entry) {
+                entry.msgId = event.message_id;
+                if (event.message_id) {
+                  const msgDiv = getMsgDiv(entry.el);
+                  if (msgDiv) msgDiv.dataset.messageId = event.message_id;
                 }
-                regenBtn.dataset.userMsgId = userMessageId;
+                const contentDiv = getContent(entry.el);
+                if (contentDiv) {
+                  contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+                  enhanceCodeBlocks(contentDiv);
+                }
+                finishStreaming(entry.el);
               }
+              currentBubble = null;
+              break;
+            }
 
+            // ── 完成事件 ──
+            case "done": {
+              if (event.dual) {
+                userMessageId = event.user_message_id;
+                if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
+
+                if (event.message_ids) {
+                  bubbles.forEach((b, i) => {
+                    if (event.message_ids[i]) {
+                      const d = getMsgDiv(b.el);
+                      if (d) d.dataset.messageId = event.message_ids[i];
+                    }
+                  });
+                }
+              } else {
+                // 单模型
+                userMessageId = event.user_message_id;
+                const assistantMessageId = event.assistant_message_id;
+                if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
+
+                const entry = bubbles[bubbles.length - 1];
+                if (entry && entry.el) {
+                  const msgDiv = getMsgDiv(entry.el);
+                  if (msgDiv && assistantMessageId) msgDiv.dataset.messageId = assistantMessageId;
+                  // 完成渲染
+                  const contentDiv = getContent(entry.el);
+                  if (contentDiv) {
+                    contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+                    enhanceCodeBlocks(contentDiv);
+                  }
+                  finishStreaming(entry.el);
+
+                  // 单模型：给最后一个 assistant 消息加重试按钮
+                  if (userMsgDiv && userMessageId) {
+                    let regenBtn = msgDiv.querySelector(".regenerate-btn");
+                    if (!regenBtn) {
+                      regenBtn = document.createElement("button");
+                      regenBtn.className = "regenerate-btn";
+                      regenBtn.textContent = "↻";
+                      regenBtn.title = "重新生成";
+                      msgDiv.appendChild(regenBtn);
+                    }
+                    regenBtn.dataset.userMsgId = userMessageId;
+                  }
+                }
+              }
               loadSlots();
               break;
+            }
 
-            case "error":
-              finishStreaming(bubble);
+            // ── 错误处理 ──
+            case "error": {
+              bubbles.forEach(b => {
+                if (b.el) {
+                  const d = getMsgDiv(b.el);
+                  if (d) d.remove();
+                }
+              });
+              bubbles = [];
+              if (currentBubble) {
+                const d = getMsgDiv(currentBubble);
+                if (d) d.remove();
+                currentBubble = null;
+              }
+              // 本轮失败，后端会回滚数据库；移除用户消息气泡保持视觉一致
+              if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
+
               if (code === "ollama_need_key") {
                 const container = document.getElementById("chat-messages");
                 const empty = container?.querySelector(".empty-state");
                 if (empty) empty.remove();
                 const card = document.createElement("div");
                 card.className = "message error";
-                card.innerHTML = `
-                  <div class="bubble">
-                    <div style="margin-bottom:12px">⚠️ ${content || "无法连接"}</div>
-                    <input type="password" id="ollama-key-input" class="create-input"
-                      placeholder="输入 Ollama Cloud API Key" autocomplete="off"
-                      style="margin-bottom:10px;width:100%" />
-                    <button id="ollama-key-save-btn" class="modal-btn modal-btn-confirm"
-                      style="width:100%;padding:10px">保存并重试</button>
-                  </div>
-                `;
+                card.innerHTML = `<div class="bubble">
+                  <div style="margin-bottom:12px">⚠️ ${content || "无法连接"}</div>
+                  <input type="password" id="ollama-key-input" class="create-input"
+                    placeholder="输入 Ollama Cloud API Key" autocomplete="off"
+                    style="margin-bottom:10px;width:100%" />
+                  <button id="ollama-key-save-btn" class="modal-btn modal-btn-confirm"
+                    style="width:100%;padding:10px">保存并重试</button>
+                </div>`;
                 container?.appendChild(card);
                 setTimeout(() => document.getElementById("ollama-key-input")?.focus(), 100);
                 document.getElementById("ollama-key-save-btn")?.addEventListener("click", async () => {
@@ -275,94 +360,57 @@ export async function sendMessage() {
                   }
                 });
               } else {
-                const errorMessages = {
+                const msgs = {
                   auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
                   rate_limited: "⏳ 请求过于频繁，请稍后重试",
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
                   config_error: "⚙️ 模型配置错误",
                 };
-                const displayMsg = errorMessages[code]
-                  ? errorMessages[code]
-                  : `⚠️ ${content || "未知错误"}`;
-                addErrorMessage(displayMsg);
+                addErrorMessage(msgs[code] || `⚠️ ${content || "未知错误"}`, text);
               }
               break;
+            }
           }
-        } catch (_) {
-          // Ignore parse errors for incomplete lines
-        }
+        } catch (_) { /* ignore parse errors */ }
       }
     }
 
   } catch (e) {
     if (idleCheck !== null) clearInterval(idleCheck);
-    // 主动取消（由 abort 抛异常进入）→ 回滚
     if (state.streamCancelled || e.name === "AbortError") {
-      if (bubble) {
-        const allMsgs = document.querySelectorAll("#chat-messages > .message");
-        const userDiv = allMsgs[allMsgs.length - 2];
-        const aiDiv = allMsgs[allMsgs.length - 1];
-        if (userDiv) userDiv.remove();
-        if (aiDiv) aiDiv.remove();
-        if (!document.querySelector("#chat-messages .message")) {
-          document.getElementById("chat-messages").innerHTML = `
-            <div class="empty-state">
-              <div class="empty-icon">✦</div>
-              <div class="empty-title">开始新的对话</div>
-              <div class="empty-desc">在下方输入消息，与 AI 开始交流</div>
-            </div>
-          `;
-        }
-        const msgInput = document.getElementById("message-input");
-        if (msgInput) {
-          msgInput.value = text;
-          msgInput.style.height = "auto";
-          msgInput.focus();
-        }
-      }
+      rollbackMessages(text);
       showToast("已取消", "info");
     } else {
-      if (bubble) {
-        bubble.textContent = "";
-        finishStreaming(bubble);
+      bubbles.forEach(b => {
+        if (b.el) {
+          const d = getMsgDiv(b.el);
+          if (d) d.remove();
+        }
+      });
+      bubbles = [];
+      if (currentBubble) {
+        const d = getMsgDiv(currentBubble);
+        if (d) d.remove();
+        currentBubble = null;
       }
-      addErrorMessage(`请求失败: ${e.message}`);
+      if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
+      addErrorMessage(`请求失败: ${e.message}`, text);
     }
-  }
-
-
-  finally {
-// 用户主动取消（正常退出 while）→ 回滚
-    if (state.streamCancelled && bubble) {
-      const allMsgs = document.querySelectorAll("#chat-messages > .message");
-      const userDiv = allMsgs[allMsgs.length - 2];
-      const aiDiv = allMsgs[allMsgs.length - 1];
-      if (userDiv) userDiv.remove();
-      if (aiDiv) aiDiv.remove();
-      if (!document.querySelector("#chat-messages .message")) {
-        document.getElementById("chat-messages").innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">✦</div>
-            <div class="empty-title">开始新的对话</div>
-            <div class="empty-desc">在下方输入消息，与 AI 开始交流</div>
-          </div>
-        `;
-      }
-      const msgInput = document.getElementById("message-input");
-      if (msgInput) {
-        msgInput.value = text;
-        msgInput.style.height = "auto";
-        msgInput.focus();
-      }
+  } finally {
+    if (state.streamCancelled) {
+      rollbackMessages(text);
       showToast("已取消", "info");
     }
   }
 
-  // 刷新存档数据和侧栏
+  // 刷新存档数据
   if (state.currentSlotIndex !== null) {
     try {
       state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
+      state.dualEnabled = state.currentSlotData.dual_enabled || false;
+      state.responseMode = state.currentSlotData.response_mode || "both";
+      state.firstModel = state.currentSlotData.first_model || "model1";
       updateSidebarInfo();
     } catch (_) { /* 静默失败 */ }
   }
@@ -373,17 +421,46 @@ export async function sendMessage() {
   document.getElementById("message-input")?.focus();
 }
 
-// ── Regenerate (使用 userMsgId 定位) ──
+function rollbackMessages(text) {
+  const allMsgs = document.querySelectorAll("#chat-messages > .message");
+  const msgsToRemove = [];
+  for (let i = allMsgs.length - 1; i >= Math.max(0, allMsgs.length - 5); i--) {
+    const m = allMsgs[i];
+    if (m && (m.classList.contains("user") || m.classList.contains("assistant"))) {
+      msgsToRemove.push(m);
+    }
+    if (m && m.classList.contains("user")) break;
+  }
+  msgsToRemove.forEach(m => m?.remove());
+  if (!document.querySelector("#chat-messages .message")) {
+    document.getElementById("chat-messages").innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">✦</div>
+        <div class="empty-title">开始新的对话</div>
+        <div class="empty-desc">在下方输入消息，与 AI 开始交流</div>
+      </div>`;
+  }
+  const msgInput = document.getElementById("message-input");
+  if (msgInput) {
+    msgInput.value = text;
+    msgInput.style.height = "auto";
+    msgInput.focus();
+  }
+}
+
+// ── Regenerate (单模型，双模型禁用) ──
 
 export async function regenerate(userMsgId) {
   if (state.streaming) return;
+  if (state.dualEnabled) {
+    showToast("双模型模式不支持重试，请编辑用户消息", "warning");
+    return;
+  }
 
-  // 通过 data-user-msg-id 找到对应的 assistant 消息
   const regenBtn = document.querySelector(`.regenerate-btn[data-user-msg-id="${userMsgId}"]`);
   if (!regenBtn) return;
   const assistantDiv = regenBtn.closest(".message");
 
-  // 向前找到对应的用户消息
   let userDiv = assistantDiv ? assistantDiv.previousElementSibling : null;
   while (userDiv && !userDiv.classList.contains("user")) {
     userDiv = userDiv.previousElementSibling;
@@ -397,17 +474,13 @@ export async function regenerate(userMsgId) {
   }
   const userText = userBubble.textContent || "";
 
-  // 删除后端数据
   try {
-    await apiDelete(`/api/slots/${state.currentSlotIndex}/chat/messages`, {
-      from_id: userMsgId,
-    });
+    await apiDelete(`/api/slots/${state.currentSlotIndex}/chat/messages`, { from_id: userMsgId });
   } catch (e) {
     showToast("操作失败: " + e.message, "error");
     return;
   }
 
-  // 移除 DOM 中这条用户消息及之后的所有消息
   let current = userDiv;
   while (current) {
     const next = current.nextElementSibling;
@@ -415,7 +488,6 @@ export async function regenerate(userMsgId) {
     current = next;
   }
 
-  // 填回输入框并发送
   const input = document.getElementById("message-input");
   input.value = userText;
   input.style.height = "auto";
@@ -427,7 +499,6 @@ export async function regenerate(userMsgId) {
 export function cancelStream() {
   if (!state.streaming) return;
   state.streamCancelled = true;
-  // 直接取消 reader（最可靠的方式终止 SSE 循环）
   if (state.currentReader) {
     try { state.currentReader.cancel(); } catch (_) { /* ignore */ }
     state.currentReader = null;
@@ -452,7 +523,6 @@ export function editAndResend(msgElement) {
   const originalText = bubble.textContent;
   if (!originalText) return;
 
-  // Switch to edit mode
   const textarea = document.createElement("textarea");
   textarea.className = "edit-textarea";
   textarea.value = originalText;
@@ -471,26 +541,23 @@ export function editAndResend(msgElement) {
   actions.appendChild(saveBtn);
   actions.appendChild(cancelBtn);
 
-  // Hide edit button
   const editBtn = msgElement.querySelector(".user-edit-btn");
   if (editBtn) editBtn.style.visibility = "hidden";
 
-  bubble.innerHTML = "";
-  bubble.appendChild(textarea);
-  bubble.appendChild(actions);
+  const contentDiv = bubble.querySelector(".bubble-content") || bubble;
+  contentDiv.innerHTML = "";
+  contentDiv.appendChild(textarea);
+  contentDiv.appendChild(actions);
   bubble.classList.add("editing");
 
   textarea.focus();
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
-  // Auto-resize
   textarea.addEventListener("input", () => {
     textarea.style.height = "auto";
     textarea.style.height = textarea.scrollHeight + "px";
   });
   textarea.style.height = textarea.scrollHeight + "px";
-
-  // ── Save handler ──
 
   saveBtn.onclick = async () => {
     const newText = textarea.value.trim();
@@ -499,25 +566,20 @@ export function editAndResend(msgElement) {
       return;
     }
     if (newText === originalText) {
-      cancelEdit(bubble, originalText, editBtn, msgElement);
+      cancelEdit(contentDiv, originalText, editBtn, bubble);
       return;
     }
 
-    // 使用 data-message-id 定位（取代 getHistoryIndex）
     const messageId = parseInt(msgElement.dataset.messageId, 10);
     if (!messageId) {
       showToast("无法定位消息 ID", "error");
-      cancelEdit(bubble, originalText, editBtn, msgElement);
+      cancelEdit(contentDiv, originalText, editBtn, bubble);
       return;
     }
 
     try {
-      // 从这条消息起全部删除，让 sendMessage 重新追加
-      await apiDelete(`/api/slots/${state.currentSlotIndex}/chat/messages`, {
-        from_id: messageId,
-      });
+      await apiDelete(`/api/slots/${state.currentSlotIndex}/chat/messages`, { from_id: messageId });
 
-      // 移除 DOM 中这条消息及之后的所有消息
       let current = msgElement;
       while (current) {
         const next = current.nextElementSibling;
@@ -525,7 +587,6 @@ export function editAndResend(msgElement) {
         current = next;
       }
 
-      // 将编辑后的文本放入输入框并自动发送
       const input = document.getElementById("message-input");
       input.value = newText;
       input.style.height = "auto";
@@ -533,22 +594,50 @@ export function editAndResend(msgElement) {
       sendMessage();
     } catch (e) {
       showToast("编辑失败: " + e.message, "error");
-      cancelEdit(bubble, originalText, editBtn, msgElement);
+      cancelEdit(contentDiv, originalText, editBtn, bubble);
     }
   };
 
   cancelBtn.onclick = () => {
-    cancelEdit(bubble, originalText, editBtn, msgElement);
+    cancelEdit(contentDiv, originalText, editBtn, bubble);
   };
 }
 
-function cancelEdit(bubble, originalText, editBtn, msgElement) {
+function cancelEdit(contentDiv, originalText, editBtn, bubble) {
   bubble.classList.remove("editing");
-  bubble.textContent = originalText;
+  contentDiv.textContent = originalText;
   if (editBtn) editBtn.style.visibility = "";
 }
 
-// ── Helper: close sidebar (local) ──
+// ── 切换双模型回复模式 ──
+
+export async function setDualResponseMode(mode, firstModel) {
+  if (state.streaming) {
+    showToast("请等待当前回复完成", "warning");
+    return;
+  }
+  const idx = state.currentSlotIndex;
+  if (idx === null) return;
+
+  try {
+    const resp = await apiPatch(`/api/slots/${idx}/dual-toggle`, {
+      response_mode: mode,
+      first_model: firstModel || state.firstModel || "model1",
+    });
+    state.responseMode = resp.dual_config?.response_mode || mode;
+    state.firstModel = resp.dual_config?.first_model || firstModel || "model1";
+    updateSidebarInfo();
+    showToast(
+      mode === "both" ? "已设为同时回复" :
+      mode === "model1" ? "已设为仅模型1回复" : "已设为仅模型2回复",
+      "success"
+    );
+  } catch (e) {
+    showToast("切换失败: " + e.message, "error");
+  }
+}
+
+// ── Helper: close sidebar ──
 
 function closeSidebar() {
   const sidebar = document.getElementById("sidebar");

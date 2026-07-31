@@ -117,25 +117,73 @@
   <div id="create-modal" class="modal-overlay hidden">
     <div class="modal-content wizard-content">
       <!-- Step indicator -->
-      <div class="wizard-steps">
-        <div class="wizard-step active" data-step="1">
+      <div class="wizard-steps" id="wizard-steps">
+        <div class="wizard-step active" data-step="0">
+          <span class="wizard-step-num">0</span>
+          <span class="wizard-step-label">模式</span>
+        </div>
+        <div class="wizard-step-connector"></div>
+        <div class="wizard-step" data-step="1">
           <span class="wizard-step-num">1</span>
-          <span class="wizard-step-label">选择模型</span>
+          <span class="wizard-step-label">🤖 模型</span>
         </div>
         <div class="wizard-step-connector"></div>
         <div class="wizard-step" data-step="2">
           <span class="wizard-step-num">2</span>
-          <span class="wizard-step-label">调整参数</span>
+          <span class="wizard-step-label">⚙️ 参数</span>
         </div>
         <div class="wizard-step-connector"></div>
         <div class="wizard-step" data-step="3">
           <span class="wizard-step-num">3</span>
-          <span class="wizard-step-label">设置提示词</span>
+          <span class="wizard-step-label">💬 提示词</span>
+        </div>
+        <div class="wizard-step-connector"></div>
+        <div class="wizard-step" data-step="4">
+          <span class="wizard-step-num">4</span>
+          <span class="wizard-step-label">🌟 模型2</span>
+        </div>
+        <div class="wizard-step-connector"></div>
+        <div class="wizard-step" data-step="5">
+          <span class="wizard-step-num">5</span>
+          <span class="wizard-step-label">🌟 参数2</span>
         </div>
       </div>
 
-      <!-- Step 1: Model selection + API Key -->
-      <div class="wizard-panel" id="wizard-step-1">
+      <!-- Step 0: 选择模式（单模型 / 双模型） -->
+      <div class="wizard-panel" id="wizard-step-0">
+        <div class="create-field dual-mode-toggle-field">
+          <label class="create-label">对话模式</label>
+          <div class="dual-toggle-options">
+            <label class="dual-option" id="dual-option-single">
+              <input type="radio" name="dual-mode" value="single" checked />
+              <div class="dual-option-content">
+                <span class="dual-option-icon">🤖</span>
+                <span class="dual-option-title">单模型</span>
+                <span class="dual-option-desc">一个 AI 模型对话</span>
+              </div>
+            </label>
+            <label class="dual-option" id="dual-option-dual">
+              <input type="radio" name="dual-mode" value="dual" />
+              <div class="dual-option-content">
+                <span class="dual-option-icon">🎭🌟</span>
+                <span class="dual-option-title">双模型 Role-Play</span>
+                <span class="dual-option-desc">两个模型依次回答，适合角色扮演</span>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 1: Model / Model1 selection + Name + API Key -->
+      <div class="wizard-panel hidden" id="wizard-step-1">
+        <div class="wizard-panel-header" id="step1-header">
+          <span class="wizard-panel-icon" id="step1-icon">🤖</span>
+          <span class="wizard-panel-title" id="step1-title">选择模型</span>
+        </div>
+        <div class="create-field" id="field-model1-name" style="display:none">
+          <label class="create-label">🎭 角色名称</label>
+          <input type="text" id="create-model1-name" class="create-input" placeholder="如: 侦探、魔法师、顾问…" maxlength="20" />
+        </div>
         <div class="create-field">
           <label class="create-label">AI 模型</label>
           <div class="select-wrapper">
@@ -146,12 +194,16 @@
         <div class="create-field" id="api-key-field" style="display:none">
           <label class="create-label" id="api-key-label">API 密钥</label>
           <input type="password" id="create-api-key" class="create-input" placeholder="请输入 API Key" autocomplete="off" />
-          <p class="create-hint">密钥仅与此存档绑定，不会暴露给前端其他部分</p>
+          <p class="create-hint">密钥仅与此存档绑定</p>
         </div>
       </div>
 
-      <!-- Step 2: Parameter configuration -->
+      <!-- Step 2: Params + System Prompt -->
       <div class="wizard-panel hidden" id="wizard-step-2">
+        <div class="wizard-panel-header" id="step2-header">
+          <span class="wizard-panel-icon" id="step2-icon">⚙️</span>
+          <span class="wizard-panel-title" id="step2-title">调整参数</span>
+        </div>
         <p class="wizard-params-hint">调整 AI 生成参数，鼠标悬停可查看详细说明</p>
         <div class="params-grid" id="params-grid">
           <div class="param-item">
@@ -231,18 +283,162 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Step 3: System Prompt + 自定义标题 -->
-      <div class="wizard-panel hidden" id="wizard-step-3">
-        <div class="create-field">
-          <label class="create-label">存档标题</label>
-          <input type="text" id="create-title" class="create-input" placeholder="给存档取个名字（可选，留空自动生成）" />
-        </div>
-        <div class="create-field">
+        <div class="create-field" style="margin-top:16px" id="step2-prompt-field">
           <label class="create-label">系统提示词</label>
           <textarea id="create-system-prompt" class="wizard-prompt-input" placeholder="设定 AI 的角色、说话风格等…">使用中文回答</textarea>
-          <p class="create-hint">存档标题留空时将从系统提示词自动生成</p>
+        </div>
+      </div>
+
+      <!-- Step 3: Single mode - System Prompt + Title / Dual mode - Model2 selection -->
+      <div class="wizard-panel hidden" id="wizard-step-3">
+        <div class="wizard-panel-header" id="step3-header">
+          <span class="wizard-panel-icon" id="step3-icon">💬</span>
+          <span class="wizard-panel-title" id="step3-title">设置提示词</span>
+        </div>
+        <div id="step3-single">
+          <div class="create-field">
+            <label class="create-label">存档标题</label>
+            <input type="text" id="create-title" class="create-input" placeholder="给存档取个名字（可选，留空自动生成）" />
+          </div>
+          <div class="create-field">
+            <label class="create-label">系统提示词</label>
+            <textarea id="create-system-prompt-single" class="wizard-prompt-input" placeholder="设定 AI 的角色、说话风格等…">使用中文回答</textarea>
+            <p class="create-hint">存档标题留空时将从系统提示词自动生成</p>
+          </div>
+        </div>
+        <div id="step3-dual" style="display:none">
+          <div class="wizard-panel-header">
+            <span class="wizard-panel-icon">🌟</span>
+            <span class="wizard-panel-title">模型 2 配置</span>
+          </div>
+          <div class="create-field">
+            <label class="create-label">🌟 角色名称</label>
+            <input type="text" id="create-model2-name" class="create-input" placeholder="如: 评论员、助手、对手…" maxlength="20" />
+          </div>
+          <div class="create-field">
+            <label class="create-label">AI 模型</label>
+            <div class="select-wrapper">
+              <select id="create-model2-select"></select>
+              <span class="select-arrow">▼</span>
+            </div>
+          </div>
+          <div class="create-field" id="api-key-field-2" style="display:none">
+            <label class="create-label" id="api-key-label-2">API 密钥</label>
+            <input type="password" id="create-api-key-2" class="create-input" placeholder="请输入 API Key" autocomplete="off" />
+            <p class="create-hint">密钥仅与此存档绑定</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: (Dual mode only) Model2 Params + System Prompt -->
+      <div class="wizard-panel hidden" id="wizard-step-4">
+        <div class="wizard-panel-header">
+          <span class="wizard-panel-icon">🌟</span>
+          <span class="wizard-panel-title">模型 2 参数设定</span>
+        </div>
+        <p class="wizard-params-hint">调整模型 2 的生成参数</p>
+        <div class="params-grid" id="params-grid-m2">
+          <div class="param-item">
+            <label class="param-label" title="控制输出的随机性">temperature</label>
+            <div class="param-control">
+              <input type="range" id="param2-temperature" min="0" max="2" step="0.05" value="1.1" />
+              <span class="param-value" id="param2-temperature-val">1.1</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="核采样阈值">top_p</label>
+            <div class="param-control">
+              <input type="range" id="param2-top-p" min="0" max="1" step="0.01" value="0.95" />
+              <span class="param-value" id="param2-top-p-val">0.95</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="最低概率阈值">min_p</label>
+            <div class="param-control">
+              <input type="range" id="param2-min-p" min="0" max="1" step="0.01" value="0.1" />
+              <span class="param-value" id="param2-min-p-val">0.1</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="Top-K 采样">top_k</label>
+            <div class="param-control">
+              <input type="range" id="param2-top-k" min="0" max="200" step="1" value="100" />
+              <span class="param-value" id="param2-top-k-val">100</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="重复惩罚">repeat_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param2-repeat-penalty" min="0" max="2" step="0.01" value="1.25" />
+              <span class="param-value" id="param2-repeat-penalty-val">1.25</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="存在惩罚">presence_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param2-presence-penalty" min="0" max="2" step="0.01" value="0.4" />
+              <span class="param-value" id="param2-presence-penalty-val">0.4</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="频率惩罚">frequency_penalty</label>
+            <div class="param-control">
+              <input type="range" id="param2-frequency-penalty" min="0" max="2" step="0.01" value="0.0" />
+              <span class="param-value" id="param2-frequency-penalty-val">0.0</span>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="上下文窗口大小">num_ctx</label>
+            <div class="param-control">
+              <select id="param2-num-ctx" class="param-select">
+                <option value="4096">4K</option>
+                <option value="8192">8K</option>
+                <option value="16384">16K</option>
+                <option value="32768">32K</option>
+                <option value="65536">64K</option>
+                <option value="131072" selected>128K</option>
+                <option value="262144">256K</option>
+              </select>
+            </div>
+          </div>
+          <div class="param-item">
+            <label class="param-label" title="每次最多生成的 token 数">num_predict</label>
+            <div class="param-control">
+              <select id="param2-num-predict" class="param-select">
+                <option value="512">512</option>
+                <option value="1024">1K</option>
+                <option value="2048">2K</option>
+                <option value="4096" selected>4K</option>
+                <option value="8192">8K</option>
+                <option value="16384">16K</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="create-field" style="margin-top:16px">
+          <label class="create-label">🌟 系统提示词</label>
+          <textarea id="create-system-prompt-2" class="wizard-prompt-input" placeholder="设定 AI 的角色、说话风格等…">使用中文回答</textarea>
+        </div>
+        <div class="create-field" style="margin-top:8px">
+          <label class="create-label">另一模型的回复以什么身份传入？</label>
+          <div class="pass-mode-options">
+            <label class="pass-mode-option">
+              <input type="radio" name="pass-mode" value="user" checked />
+              <span>用户消息 (user)</span>
+            </label>
+            <label class="pass-mode-option">
+              <input type="radio" name="pass-mode" value="assistant" />
+              <span>AI 消息 (assistant)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 5: (Dual mode only) Title (final step before create) -->
+      <div class="wizard-panel hidden" id="wizard-step-5">
+        <div class="create-field">
+          <label class="create-label">存档标题</label>
+          <input type="text" id="create-title-dual" class="create-input" placeholder="给存档取个名字（可选，留空自动生成）" />
         </div>
       </div>
 
@@ -296,11 +492,54 @@
         <div class="sidebar-section">
           <label class="section-label">AI 模型</label>
           <div class="model-display" id="slot-model-display">-</div>
+          <div class="model-display" id="slot-model2-display" style="display:none;margin-top:6px"></div>
         </div>
 
         <div class="sidebar-section">
           <label class="section-label">系统提示词</label>
           <div class="prompt-display" id="slot-prompt-display">-</div>
+          <div class="prompt-display" id="slot-prompt2-display" style="display:none;margin-top:6px"></div>
+        </div>
+
+        <!-- Dual mode response controls -->
+        <div class="sidebar-section" id="dual-response-section" style="display:none">
+          <label class="section-label">当前回复模式</label>
+          <div class="response-mode-group">
+            <label class="response-mode-option">
+              <input type="radio" name="response-mode" value="both" checked />
+              <div class="response-mode-content">
+                <span class="response-mode-icon">🎭➕🌟</span>
+                <span class="response-mode-label">同时回复</span>
+              </div>
+            </label>
+            <label class="response-mode-option">
+              <input type="radio" name="response-mode" value="model1" />
+              <div class="response-mode-content">
+                <span class="response-mode-icon">🎭</span>
+                <span class="response-mode-label">仅模型1</span>
+              </div>
+            </label>
+            <label class="response-mode-option">
+              <input type="radio" name="response-mode" value="model2" />
+              <div class="response-mode-content">
+                <span class="response-mode-icon">🌟</span>
+                <span class="response-mode-label">仅模型2</span>
+              </div>
+            </label>
+          </div>
+          <div class="first-model-control" id="first-model-control" style="margin-top:8px">
+            <label class="response-sub-label">先回复顺序</label>
+            <div class="first-model-group">
+              <label class="first-model-option">
+                <input type="radio" name="first-model" value="model1" checked />
+                <span>🎭 模型1 先</span>
+              </label>
+              <label class="first-model-option">
+                <input type="radio" name="first-model" value="model2" />
+                <span>🌟 模型2 先</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- Actions -->

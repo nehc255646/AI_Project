@@ -102,6 +102,7 @@ class SlotManager:
                         api_key VARCHAR(256) DEFAULT '',
                         title VARCHAR(128) DEFAULT '',
                         params TEXT,
+                        dual_config TEXT,
                         created_at VARCHAR(32) DEFAULT '',
                         updated_at VARCHAR(32) DEFAULT ''
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -111,6 +112,7 @@ class SlotManager:
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         slot_id INT NOT NULL,
                         role VARCHAR(16) NOT NULL,
+                        source VARCHAR(16) NOT NULL DEFAULT '',
                         content TEXT,
                         created_at VARCHAR(32) DEFAULT '',
                         FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE,
@@ -119,11 +121,18 @@ class SlotManager:
                 """)
                 for col, col_def in [
                     ("params", "TEXT AFTER title"),
+                    ("dual_config", "TEXT AFTER params"),
                 ]:
                     cursor.execute(f"SHOW COLUMNS FROM `slots` LIKE '{col}'")
                     if not cursor.fetchone():
                         cursor.execute(f"ALTER TABLE `slots` ADD COLUMN `{col}` {col_def}")
                         logger.info(f"已添加 {col} 列到 slots 表")
+                cursor.execute(f"SHOW COLUMNS FROM `messages` LIKE 'source'")
+                if not cursor.fetchone():
+                    cursor.execute(
+                        "ALTER TABLE `messages` ADD COLUMN `source` VARCHAR(16) NOT NULL DEFAULT '' AFTER role"
+                    )
+                    logger.info("已添加 source 列到 messages 表")
             conn.commit()
             logger.info("MySQL 数据库表初始化完成")
         except pymysql.Error as e:
@@ -150,7 +159,7 @@ class SlotManager:
 
     def create_slot(self, index: int, model: str, system_prompt: str,
                      api_key: str = "", params: Optional[dict] = None,
-                     title: str = "") -> bool:
+                     title: str = "", dual_config: Optional[dict] = None) -> bool:
         if index < 0 or index >= SLOT_COUNT:
             return False
         conn = _get_connection(self.pool)
@@ -162,10 +171,11 @@ class SlotManager:
                 now = datetime.datetime.now().isoformat()
                 title = title.strip()
                 params_json = json.dumps(params) if params else "{}"
+                dual_json = json.dumps(dual_config) if dual_config else "{}"
                 cursor.execute(
-                    "INSERT INTO slots (id, model, system_prompt, api_key, title, params, created_at, updated_at) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (index, model, system_prompt, api_key, title, params_json, now, now),
+                    "INSERT INTO slots (id, model, system_prompt, api_key, title, params, dual_config, created_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (index, model, system_prompt, api_key, title, params_json, dual_json, now, now),
                 )
             conn.commit()
             return True
@@ -191,8 +201,15 @@ class SlotManager:
                         slot["params"] = {}
                 elif slot.get("params") is None:
                     slot["params"] = {}
+                if isinstance(slot.get("dual_config"), str):
+                    try:
+                        slot["dual_config"] = json.loads(slot["dual_config"])
+                    except (json.JSONDecodeError, TypeError):
+                        slot["dual_config"] = {}
+                elif slot.get("dual_config") is None:
+                    slot["dual_config"] = {}
                 cursor.execute(
-                    "SELECT id, role, content FROM messages WHERE slot_id = %s ORDER BY id ASC",
+                    "SELECT id, role, content, source FROM messages WHERE slot_id = %s ORDER BY id ASC",
                     (index,),
                 )
                 slot["history"] = list(cursor.fetchall())
@@ -253,8 +270,8 @@ class SlotManager:
                 cursor.execute("DELETE FROM messages WHERE slot_id = %s", (index,))
                 if history:
                     cursor.executemany(
-                        "INSERT INTO messages (slot_id, role, content) VALUES (%s, %s, %s)",
-                        [(index, m.get("role", ""), m.get("content", "")) for m in history],
+                        "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
+                        [(index, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in history],
                     )
                 cursor.execute(
                     "UPDATE slots SET updated_at = %s WHERE id = %s",
@@ -276,8 +293,8 @@ class SlotManager:
         try:
             with conn.cursor() as cursor:
                 cursor.executemany(
-                    "INSERT INTO messages (slot_id, role, content) VALUES (%s, %s, %s)",
-                    [(slot_id, m.get("role", ""), m.get("content", "")) for m in messages],
+                    "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
+                    [(slot_id, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in messages],
                 )
                 first_id = cursor.lastrowid
                 ids = list(range(first_id, first_id + len(messages)))
@@ -379,6 +396,16 @@ class SlotManager:
                             params_val = {}
                         else:
                             params_val = params_raw
+                        # 解析 dual_config JSON
+                        dual_raw = slot.get("dual_config", "{}")
+                        dual_val = {}
+                        if isinstance(dual_raw, str):
+                            try:
+                                dual_val = json.loads(dual_raw)
+                            except (json.JSONDecodeError, TypeError):
+                                dual_val = {}
+                        elif isinstance(dual_raw, dict):
+                            dual_val = dual_raw
                         result.append({
                             "index": i,
                             "model": slot.get("model", "未知"),
@@ -388,10 +415,33 @@ class SlotManager:
                             "message_count": slot.get("msg_count", 0) // 2,
                             "title": slot.get("title", ""),
                             "params": params_val,
+                            "dual_config": dual_val,
+                            "dual_enabled": dual_val.get("enabled", False),
                         })
                 return result
         except pymysql.Error as e:
             logger.error(f"list_slots 失败: {e}")
             return [None] * SLOT_COUNT
+        finally:
+            conn.close()
+
+    def update_dual_config(self, index: int, dual_config: dict) -> bool:
+        """更新 dual_config（如切换响应模式）。"""
+        conn = _get_connection(self.pool)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                if not cursor.fetchone():
+                    return False
+                cursor.execute(
+                    "UPDATE slots SET dual_config = %s, updated_at = %s WHERE id = %s",
+                    (json.dumps(dual_config), datetime.datetime.now().isoformat(), index),
+                )
+            conn.commit()
+            return True
+        except pymysql.Error as e:
+            logger.error(f"update_dual_config({index}) 失败: {e}")
+            _safe_rollback(conn)
+            return False
         finally:
             conn.close()

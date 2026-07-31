@@ -25,7 +25,7 @@ import {
 import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal } from "./modals.js";
 
 // ── Chat ──
-import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate } from "./chat.js";
+import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode } from "./chat.js";
 
 // ── Utils ──
 import { $ } from "./utils.js";
@@ -177,6 +177,24 @@ function setupEventListeners() {
     if (!btn) return;
     const userMsgId = parseInt(btn.dataset.userMsgId, 10);
     if (!isNaN(userMsgId)) regenerate(userMsgId);
+  });
+
+  // ── Dual mode: response mode radio ──
+  document.querySelectorAll('input[name="response-mode"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const mode = e.target.value;
+      const firstRadio = document.querySelector('input[name="first-model"]:checked');
+      const first = firstRadio ? firstRadio.value : "model1";
+      setDualResponseMode(mode, first);
+    });
+  });
+
+  document.querySelectorAll('input[name="first-model"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const modeRadio = document.querySelector('input[name="response-mode"]:checked');
+      const mode = modeRadio ? modeRadio.value : "both";
+      setDualResponseMode(mode, e.target.value);
+    });
   });
 
   // ── Title editing ──

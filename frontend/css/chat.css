@@ -515,6 +515,167 @@
   text-align: center;
 }
 
+/* 错误消息中的重试按钮 */
+.message.error .bubble .retry-btn {
+  display: block;
+  margin: 10px auto 4px;
+  padding: 8px 22px;
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.message.error .bubble .retry-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 2px 14px rgba(139, 92, 246, 0.45);
+}
+.message.error .bubble .retry-btn:active {
+  transform: scale(0.95);
+}
+
+/* ── 双模型消息样式 ── */
+.model-label-bar {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a78bfa;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.message.assistant .model-label-bar {
+  color: #93c5fd;
+}
+.message.assistant:has(.model-label-bar) .avatar {
+  display: none; /* 双模型时隐藏默认头像，以 label 中的图标为准 */
+}
+
+/* 双模型时调整气泡极角 */
+.message.assistant:has(.model-label-bar) .bubble {
+  border-bottom-left-radius: var(--radius-xl);
+}
+
+/* 模型2 标签与模型1的 label 在 JS 中用不同 class 区分 */
+/* 在 addMessage 中，如果 label 含 🌟，会追加 model-label-bar--model2 */
+.model-label-bar--model2 {
+  color: #fbbf24 !important;
+}
+
+/* 侧栏模型2 显示 */
+.model-display-2 {
+  border-color: rgba(251, 191, 36, 0.2) !important;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.06), transparent) !important;
+}
+
+/* ── 双模型响应模式控件 ── */
+.response-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.response-mode-option {
+  display: block;
+  cursor: pointer;
+}
+
+.response-mode-option input[type="radio"] {
+  display: none;
+}
+
+.response-mode-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.response-mode-option input[type="radio"]:checked + .response-mode-content {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--text-primary);
+}
+
+.response-mode-content:hover {
+  background: var(--bg-surface-hover);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.response-mode-icon {
+  font-size: 15px;
+  width: 24px;
+  text-align: center;
+}
+
+.response-mode-label {
+  font-weight: 500;
+}
+
+.response-sub-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.first-model-group {
+  display: flex;
+  gap: 6px;
+}
+
+.first-model-option {
+  flex: 1;
+  display: block;
+  cursor: pointer;
+}
+
+.first-model-option input[type="radio"] {
+  display: none;
+}
+
+.first-model-option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.first-model-option input[type="radio"]:checked + span {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--text-primary);
+}
+
+.first-model-option:hover span {
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+
 /* ── 输入区域 ── */
 #input-area {
   padding: 12px 24px 16px;

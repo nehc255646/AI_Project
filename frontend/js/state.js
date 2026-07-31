@@ -16,4 +16,8 @@ export const state = {
   streamCancelled: false,  // 取消标志（双重保障）
   models: [],
   envStatus: {},
+  // 双模型状态
+  dualEnabled: false,
+  responseMode: "both",     // "model1" | "model2" | "both"
+  firstModel: "model1",     // "model1" | "model2"
 };

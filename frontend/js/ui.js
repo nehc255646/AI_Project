@@ -3,22 +3,17 @@
  *
  * Handles view switching, slot grid rendering, message rendering,
  * sidebar updates, and streaming status indicator.
- *
- * Changes:
- *   - renderMessages now passes message IDs and creates regenerate buttons
- *     for loaded history (fix: 重载后重试按钮不再消失)
- *   - addMessage uses messageId instead of msgIndex for data attributes
  */
 
 import { state } from "./state.js";
-import { apiGet } from "./api.js";
+import { apiGet, apiPatch } from "./api.js";
 import { $, scrollToBottom } from "./utils.js";
 import { showToast } from "./toast.js";
 import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
 import { openCreateModal } from "./modals.js";
-import { deleteSlotAction, openSlot, editAndResend } from "./chat.js";
+import { deleteSlotAction, openSlot, editAndResend, setDualResponseMode } from "./chat.js";
 
-// ── DOM refs (lazily resolved) ──
+// ── DOM refs ──
 
 function el(id) {
   return document.getElementById(id);
@@ -65,7 +60,6 @@ export function renderSlotGrid() {
     card.className = "slot-card";
 
     if (info === null || info === undefined) {
-      // Empty slot
       card.classList.add("empty");
       card.innerHTML = `
         <div class="slot-plus">+</div>
@@ -74,22 +68,18 @@ export function renderSlotGrid() {
       `;
       card.addEventListener("click", () => openCreateModal(i));
     } else {
-      // Used slot
       card.classList.add("used");
       const displayTitle = info.title || `存档 #${i + 1}`;
+      const isDual = info.dual_enabled;
 
       const fmtTime = (iso) => {
         if (!iso) return "";
         try {
           return new Date(iso).toLocaleString("zh-CN", {
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
+            month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit",
           });
-        } catch (_) {
-          return "";
-        }
+        } catch (_) { return ""; }
       };
       const created = fmtTime(info.created_at);
       const updated = fmtTime(info.updated_at);
@@ -98,7 +88,7 @@ export function renderSlotGrid() {
         <button class="slot-delete-btn" data-index="${i}" title="删除存档">✕</button>
         <div class="slot-card-content">
           <div class="slot-title">${displayTitle.slice(0, 20)}</div>
-          <div class="slot-model-badge">${info.model || "未知"}</div>
+          <div class="slot-model-badge">${isDual ? "🎭🌟 双模型" : (info.model || "未知")}</div>
           <div class="slot-time"><span class="slot-time-label">创建</span><span class="slot-time-value">${created || "未知"}</span></div>
           <div class="slot-time"><span class="slot-time-label">使用</span><span class="slot-time-value">${updated || "未知"}</span></div>
         </div>
@@ -147,20 +137,31 @@ export function renderMessages(history) {
   }
 
   let lastUserMsgId = null;
+  let isDual = state.dualEnabled;
+  let dualCfg = state.currentSlotData?.dual_config || {};
 
   history.forEach((msg) => {
     const isUser = msg.role === "user";
     const messageId = msg.id || null;
 
-    // addMessage 会在元素上设置 data-message-id
-    const bubble = addMessage(isUser ? "user" : "assistant", msg.content, false, messageId);
+    // 双模型时的消息标签（根据 source 识别回复来源模型）
+    let label = null;
+    if (!isUser && isDual) {
+      if (msg.source === "model1") {
+        label = `🎭 ${dualCfg.model1_name || "1号"}`;
+      } else if (msg.source === "model2") {
+        label = `🌟 ${dualCfg.model2_name || "2号"}`;
+      }
+    }
+
+    const bubble = addMessage(isUser ? "user" : "assistant", msg.content, false, messageId, label);
 
     if (isUser) {
       lastUserMsgId = messageId;
     }
 
-    // 为 assistant 消息添加重试按钮（带上对应的 user message id）
-    if (!isUser && lastUserMsgId !== null) {
+    // 单模型模式才添加重试按钮（历史消息）
+    if (!isUser && lastUserMsgId !== null && !isDual) {
       const msgDiv = bubble ? bubble.closest(".message") : null;
       if (msgDiv) {
         let regenBtn = msgDiv.querySelector(".regenerate-btn");
@@ -177,11 +178,10 @@ export function renderMessages(history) {
   });
 }
 
-export function addMessage(role, content, isStreaming = false, messageId = null) {
+export function addMessage(role, content, isStreaming = false, messageId = null, label = null) {
   const container = el("chat-messages");
   if (!container) return null;
 
-  // Remove empty state if present
   const empty = container.querySelector(".empty-state");
   if (empty) empty.remove();
 
@@ -193,23 +193,43 @@ export function addMessage(role, content, isStreaming = false, messageId = null)
 
   const avatar = document.createElement("div");
   avatar.className = "avatar";
-  avatar.textContent = role === "user" ? "👤" : "🤖";
+  // 双模型时，如果提供了 label，提取图标
+  if (label && label.startsWith("🎭")) {
+    avatar.textContent = "🎭";
+  } else if (label && label.startsWith("🌟")) {
+    avatar.textContent = "🌟";
+  } else {
+    avatar.textContent = role === "user" ? "👤" : "🤖";
+  }
   avatar.setAttribute("aria-hidden", "true");
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   if (isStreaming) bubble.classList.add("streaming");
 
-  // Streaming 消息在流式过程中用 textContent（增量写入），
-  // 完成后由 chat.js 替换为 renderMarkdown
-  if (role === "user") {
-    bubble.textContent = content;
-  } else if (!isStreaming) {
-    // 非流式（历史加载）直接渲染 Markdown
-    bubble.innerHTML = renderMarkdown(content);
-    enhanceCodeBlocks(bubble);
+  // 标签栏（双模型时显示角色名）
+  if (label) {
+    const labelBar = document.createElement("div");
+    labelBar.className = "model-label-bar";
+    if (label.includes("🌟")) {
+      labelBar.classList.add("model-label-bar--model2");
+    }
+    labelBar.textContent = label;
+    bubble.appendChild(labelBar);
   }
-  // isStreaming && assistant: bubble 为空，等待流式 chunk 写入
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "bubble-content";
+
+  if (role === "user" && !isStreaming) {
+    contentDiv.textContent = content;
+  } else if (role === "assistant" && !isStreaming) {
+    contentDiv.innerHTML = renderMarkdown(content);
+    enhanceCodeBlocks(contentDiv);
+  }
+  // streaming: contentDiv 留空，流式写入
+
+  bubble.appendChild(contentDiv);
 
   div.appendChild(avatar);
   div.appendChild(bubble);
@@ -225,7 +245,7 @@ export function addMessage(role, content, isStreaming = false, messageId = null)
 
   container.appendChild(div);
   scrollToBottom();
-  return bubble;
+  return bubble;  // 返回 .bubble 元素（流式写入用 textContent，完成用 innerHTML）
 }
 
 export function updateMessage(bubble, content) {
@@ -233,14 +253,22 @@ export function updateMessage(bubble, content) {
   if (bubble.classList.contains("streaming")) {
     bubble.textContent = content;
   } else {
-    bubble.innerHTML = renderMarkdown(content);
-    enhanceCodeBlocks(bubble);
+    // 查找 contentDiv
+    const contentDiv = bubble.querySelector(".bubble-content") || bubble;
+    contentDiv.innerHTML = renderMarkdown(content);
+    enhanceCodeBlocks(contentDiv);
   }
 }
 
 export function finishStreaming(bubble) {
   if (!bubble) return;
-  bubble.classList.remove("streaming");
+  // bubble 可能是 contentDiv，需要找到父级 .bubble
+  const parentBubble = bubble.closest ? bubble.closest(".bubble") : null;
+  if (parentBubble) {
+    parentBubble.classList.remove("streaming");
+  } else if (bubble.classList) {
+    bubble.classList.remove("streaming");
+  }
 }
 
 // ── Sidebar ──
@@ -254,13 +282,75 @@ export function updateSidebarInfo() {
     const title = state.currentSlotData.title || "未命名";
     el("slot-title-text").textContent = title;
     el("slot-model-display").textContent = state.currentSlotData.model || "-";
-    el("slot-prompt-display").textContent = state.currentSlotData.system_prompt || "-";
+
+    // 双模型信息
+    const dualCfg = state.currentSlotData.dual_config || {};
+    if (dualCfg.enabled) {
+      const m1Name = dualCfg.model1_name || "1号";
+      const m2Name = dualCfg.model2_name || "2号";
+      // 显示模型2
+      const m2Display = el("slot-model2-display");
+      if (m2Display) {
+        const m2Model = dualCfg.model2?.model || "";
+        m2Display.textContent = `🌟 ${m2Name} (${m2Model})`;
+        m2Display.style.display = "block";
+        m2Display.className = "model-display model-display-2";
+      }
+      // 更新模型1显示
+      el("slot-model-display").textContent = `🎭 ${m1Name} (${state.currentSlotData.model || "-"})`;
+
+      // 双模型提示词
+      el("slot-prompt-display").textContent = `🎭 ${m1Name}: ${state.currentSlotData.system_prompt || "-"}`;
+      const p2 = el("slot-prompt2-display");
+      if (p2) {
+        const m2Prompt = dualCfg.model2?.system_prompt || "使用中文回答";
+        p2.textContent = `🌟 ${m2Name}: ${m2Prompt}`;
+        p2.style.display = "block";
+        p2.className = "prompt-display";
+      }
+
+      // 显示回复模式控制区
+      const section = el("dual-response-section");
+      if (section) section.style.display = "block";
+
+      // 同步 radio 状态
+      const mode = state.responseMode || dualCfg.response_mode || "both";
+      const first = state.firstModel || dualCfg.first_model || "model1";
+      const modeRadio = document.querySelector(`input[name="response-mode"][value="${mode}"]`);
+      if (modeRadio) modeRadio.checked = true;
+      const firstRadio = document.querySelector(`input[name="first-model"][value="${first}"]`);
+      if (firstRadio) firstRadio.checked = true;
+
+      // 先后顺序只在「同时回复」时显示
+      const firstCtrl = el("first-model-control");
+      if (firstCtrl) {
+        firstCtrl.style.display = mode === "both" ? "block" : "none";
+      }
+    } else {
+      // 单模型：隐藏双模型元素，显示普通提示词
+      const m2Display = el("slot-model2-display");
+      if (m2Display) m2Display.style.display = "none";
+      const p2 = el("slot-prompt2-display");
+      if (p2) p2.style.display = "none";
+      const section = el("dual-response-section");
+      if (section) section.style.display = "none";
+      // 单模型显示普通提示词
+      el("slot-prompt-display").textContent = state.currentSlotData.system_prompt || "-";
+    }
   }
 
   el("chat-slot-badge").textContent = `存档 #${idx + 1}`;
-  el("current-model-badge").textContent = state.currentSlotData
-    ? state.currentSlotData.model || ""
-    : "";
+  // 模型徽章
+  const dualCfg = state.currentSlotData?.dual_config || {};
+  if (dualCfg.enabled) {
+    const m1Name = dualCfg.model1_name || "🎭";
+    const m2Name = dualCfg.model2_name || "🌟";
+    el("current-model-badge").textContent = `${m1Name} + ${m2Name}`;
+  } else {
+    el("current-model-badge").textContent = state.currentSlotData
+      ? state.currentSlotData.model || ""
+      : "";
+  }
 }
 
 export function openSidebar() {
@@ -297,7 +387,7 @@ export function setStreaming(val) {
 
 // ── Add error message to chat ──
 
-export function addErrorMessage(content) {
+export function addErrorMessage(content, retryText = null) {
   const container = el("chat-messages");
   if (!container) return;
 
@@ -308,5 +398,26 @@ export function addErrorMessage(content) {
   div.className = "message error";
   div.innerHTML = `<div class="bubble">⚠️ ${content}</div>`;
   container.appendChild(div);
+
+  if (retryText) {
+    const bubble = div.querySelector(".bubble");
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "retry-btn";
+    retryBtn.textContent = "🔄 重试";
+    bubble.appendChild(retryBtn);
+
+    retryBtn.addEventListener("click", () => {
+      const input = document.getElementById("message-input");
+      if (input) {
+        input.value = retryText;
+        const evt = new Event("input", { bubbles: true });
+        input.dispatchEvent(evt);
+        input.focus();
+        const sendBtn = document.getElementById("send-btn");
+        if (sendBtn && !sendBtn.disabled) sendBtn.click();
+      }
+    });
+  }
+
   scrollToBottom();
 }

@@ -681,3 +681,127 @@
   display: flex;
   gap: 10px;
 }
+
+/* ── 双模型模式选择卡片 ── */
+.dual-mode-toggle-field {
+  margin-bottom: 8px;
+}
+
+.dual-toggle-options {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.dual-option {
+  flex: 1;
+  cursor: pointer;
+}
+
+.dual-option input[type="radio"] {
+  display: none;
+}
+
+.dual-option-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  background: var(--bg-surface);
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.dual-option input[type="radio"]:checked + .dual-option-content {
+  border-color: var(--accent-1);
+  background: rgba(139, 92, 246, 0.08);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.12);
+}
+
+.dual-option-content:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  background: var(--bg-surface-hover);
+}
+
+.dual-option-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.dual-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dual-option-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── 向导面板头部 ── */
+.wizard-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 4px;
+}
+
+.wizard-panel-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.wizard-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── 传入模式选择 ── */
+.pass-mode-options {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.pass-mode-option {
+  flex: 1;
+  cursor: pointer;
+}
+
+.pass-mode-option input[type="radio"] {
+  display: none;
+}
+
+.pass-mode-option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.pass-mode-option input[type="radio"]:checked + span {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--text-primary);
+}
+
+.pass-mode-option:hover span {
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}

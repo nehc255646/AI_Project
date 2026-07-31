@@ -1,7 +1,8 @@
 /**
  * Modal management.
  *
- * Create-slot modal (3-step wizard), export modal, and API-key field logic.
+ * Create-slot modal (supports single + dual mode wizard),
+ * export modal, and API-key field logic.
  */
 
 import { state } from "./state.js";
@@ -10,99 +11,197 @@ import { showToast } from "./toast.js";
 import { loadSlots } from "./ui.js";
 import { openSlot } from "./chat.js";
 
-// ── Create Slot Modal (3-step wizard) ──
+// ── Create Slot Modal ──
 
 export let pendingCreateIndex = null;
-let currentStep = 1;
+let currentStep = 0;
+let isDualMode = false;
 
-/** 默认参数缓存（从后端获取） */
+/** 默认参数缓存 */
 let defaultParams = null;
+
+const MODEL1_ICON = "🎭";
+const MODEL2_ICON = "🌟";
 
 async function loadDefaultParams() {
   if (defaultParams) return defaultParams;
   try {
     defaultParams = await apiGet("/api/default-params");
   } catch (_) {
-    // Fallback 默认值
     defaultParams = {
-      temperature: 1.1,
-      min_p: 0.1,
-      top_k: 100,
-      top_p: 0.95,
-      repeat_penalty: 1.25,
-      presence_penalty: 0.4,
-      frequency_penalty: 0.0,
-      num_ctx: 131072,
-      num_predict: 4096,
+      temperature: 1.1, min_p: 0.1, top_k: 100, top_p: 0.95,
+      repeat_penalty: 1.25, presence_penalty: 0.4, frequency_penalty: 0.0,
+      num_ctx: 131072, num_predict: 4096,
     };
   }
   return defaultParams;
 }
 
-/** 所有参数的最新值 */
-function getParamValues() {
+function getParamValues(suffix = "") {
+  const el = (id) => document.getElementById(`param${suffix}-${id}`);
   return {
-    temperature: parseFloat(document.getElementById("param-temperature").value),
-    top_p: parseFloat(document.getElementById("param-top-p").value),
-    min_p: parseFloat(document.getElementById("param-min-p").value),
-    top_k: parseInt(document.getElementById("param-top-k").value, 10),
-    repeat_penalty: parseFloat(document.getElementById("param-repeat-penalty").value),
-    presence_penalty: parseFloat(document.getElementById("param-presence-penalty").value),
-    frequency_penalty: parseFloat(document.getElementById("param-frequency-penalty").value),
-    num_ctx: parseInt(document.getElementById("param-num-ctx").value, 10),
-    num_predict: parseInt(document.getElementById("param-num-predict").value, 10),
+    temperature: parseFloat(el("temperature").value),
+    top_p: parseFloat(el("top-p").value),
+    min_p: parseFloat(el("min-p").value),
+    top_k: parseInt(el("top-k").value, 10),
+    repeat_penalty: parseFloat(el("repeat-penalty").value),
+    presence_penalty: parseFloat(el("presence-penalty").value),
+    frequency_penalty: parseFloat(el("frequency-penalty").value),
+    num_ctx: parseInt(el("num-ctx").value, 10),
+    num_predict: parseInt(el("num-predict").value, 10),
   };
 }
 
 function showStep(step) {
   currentStep = step;
-  document.querySelectorAll(".wizard-panel").forEach((el) => el.classList.add("hidden"));
-  document.getElementById(`wizard-step-${step}`).classList.remove("hidden");
 
-  // 更新步骤指示器
-  document.querySelectorAll(".wizard-step").forEach((el) => {
+  // 处理步骤指示器
+  const steps = document.querySelectorAll(".wizard-step");
+  steps.forEach((el) => {
     const s = parseInt(el.dataset.step, 10);
+    const isVisible = isDualMode
+      ? (s === 0 || s >= 1)  // 双模型: 显示所有步骤
+      : (s >= 0 && s <= 3);  // 单模型: 只显示 0-3
+    el.style.display = isVisible ? "" : "none";
+
     el.classList.toggle("active", s === step);
     el.classList.toggle("done", s < step);
   });
 
-  // 按钮切换
-  document.getElementById("wizard-prev").style.display = step > 1 ? "" : "none";
-  document.getElementById("wizard-next").style.display = step < 3 ? "" : "none";
-  document.getElementById("wizard-create").style.display = step === 3 ? "" : "none";
+  // 隐藏所有面板，显示当前
+  document.querySelectorAll(".wizard-panel").forEach((el) => el.classList.add("hidden"));
+  const panel = document.getElementById(`wizard-step-${step}`);
+  if (panel) panel.classList.remove("hidden");
+
+  // 按钮控制
+  if (step === 0) {
+    document.getElementById("wizard-prev").style.display = "none";
+    document.getElementById("wizard-next").style.display = "";
+    document.getElementById("wizard-create").style.display = "none";
+  } else if (isDualMode) {
+    if (step === 5) {
+      document.getElementById("wizard-prev").style.display = "";
+      document.getElementById("wizard-next").style.display = "none";
+      document.getElementById("wizard-create").style.display = "";
+    } else {
+      document.getElementById("wizard-prev").style.display = "";
+      document.getElementById("wizard-next").style.display = "";
+      document.getElementById("wizard-create").style.display = "none";
+    }
+  } else {
+    // 单模型
+    if (step === 3) {
+      document.getElementById("wizard-prev").style.display = "";
+      document.getElementById("wizard-next").style.display = "none";
+      document.getElementById("wizard-create").style.display = "";
+    } else {
+      document.getElementById("wizard-prev").style.display = step > 1 ? "" : "none";
+      document.getElementById("wizard-next").style.display = "";
+      document.getElementById("wizard-create").style.display = "none";
+    }
+  }
+}
+
+function populateModelSelect(selectId, selectedKey) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = "";
+  (state.models || []).forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.key;
+    opt.textContent = m.key;
+    if (m.key === selectedKey) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+/** 填充参数滑块 */
+function populateParams(prefix) {
+  const gridId = prefix ? `params-grid-m2` : `params-grid`;
+  // params for model2 are populated with IDs like param2-temperature
+  if (prefix) return; // HTML 已内联所有滑块
+}
+
+function updateParamDisplays(suffix = "") {
+  const ids = [
+    "temperature", "top-p", "min-p", "top-k",
+    "repeat-penalty", "presence-penalty", "frequency-penalty",
+  ];
+  ids.forEach((id) => {
+    const input = document.getElementById(`param${suffix}-${id}`);
+    const display = document.getElementById(`param${suffix}-${id}-val`);
+    if (input && display) display.textContent = input.value;
+  });
 }
 
 export async function openCreateModal(index) {
   pendingCreateIndex = index;
-  const select = document.getElementById("create-model-select");
-  const prompt = document.getElementById("create-system-prompt");
-  const apiKeyInput = document.getElementById("create-api-key");
-  const titleInput = document.getElementById("create-title");
+  isDualMode = false;
+  currentStep = 0;
 
-  select.value = "DeepSeek-v4-flash";
-  prompt.value = "使用中文回答";
-  apiKeyInput.value = "";
-  titleInput.value = "";
+  // 重置模式选择
+  document.getElementById("dual-option-single").querySelector("input").checked = true;
+  document.getElementById("dual-option-dual").querySelector("input").checked = false;
 
-  // 从后端获取默认参数（消除前端硬编码重复）
+  // 重置 step3 显示
+  document.getElementById("step3-single").style.display = "";
+  document.getElementById("step3-dual").style.display = "none";
+
+  // 隐藏模型1名称字段和 step2 系统提示词（单模型默认）
+  document.getElementById("field-model1-name").style.display = "none";
+  document.getElementById("step2-prompt-field").style.display = "none";
+  document.getElementById("step1-icon").textContent = "🤖";
+  document.getElementById("step1-title").textContent = "选择模型";
+
+  // Populate model selects
+  populateModelSelect("create-model-select", "DeepSeek-v4-flash");
+  populateModelSelect("create-model2-select", "DeepSeek-v4-flash");
+
+  // 重置值
+  document.getElementById("create-model1-name").value = "";
+  document.getElementById("create-model2-name").value = "";
+  document.getElementById("create-api-key").value = "";
+  document.getElementById("create-api-key-2").value = "";
+  document.getElementById("create-title").value = "";
+  document.getElementById("create-title-dual").value = "";
+  document.getElementById("create-system-prompt").value = "使用中文回答";
+  document.getElementById("create-system-prompt-single").value = "使用中文回答";
+  document.getElementById("create-system-prompt-2").value = "使用中文回答";
+
   const params = await loadDefaultParams();
+  // 模型1参数
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = String(val);
+  };
+  setVal("param-temperature", params.temperature ?? 1.1);
+  setVal("param-top-p", params.top_p ?? 0.95);
+  setVal("param-min-p", params.min_p ?? 0.1);
+  setVal("param-top-k", params.top_k ?? 100);
+  setVal("param-repeat-penalty", params.repeat_penalty ?? 1.25);
+  setVal("param-presence-penalty", params.presence_penalty ?? 0.4);
+  setVal("param-frequency-penalty", params.frequency_penalty ?? 0.0);
+  setVal("param-num-ctx", params.num_ctx ?? 131072);
+  setVal("param-num-predict", params.num_predict ?? 4096);
 
-  document.getElementById("param-temperature").value = String(params.temperature ?? 1.1);
-  document.getElementById("param-top-p").value = String(params.top_p ?? 0.95);
-  document.getElementById("param-min-p").value = String(params.min_p ?? 0.1);
-  document.getElementById("param-top-k").value = String(params.top_k ?? 100);
-  document.getElementById("param-repeat-penalty").value = String(params.repeat_penalty ?? 1.25);
-  document.getElementById("param-presence-penalty").value = String(params.presence_penalty ?? 0.4);
-  document.getElementById("param-frequency-penalty").value = String(params.frequency_penalty ?? 0.0);
-  document.getElementById("param-num-ctx").value = String(params.num_ctx ?? 131072);
-  document.getElementById("param-num-predict").value = String(params.num_predict ?? 4096);
+  // 模型2参数
+  setVal("param2-temperature", params.temperature ?? 1.1);
+  setVal("param2-top-p", params.top_p ?? 0.95);
+  setVal("param2-min-p", params.min_p ?? 0.1);
+  setVal("param2-top-k", params.top_k ?? 100);
+  setVal("param2-repeat-penalty", params.repeat_penalty ?? 1.25);
+  setVal("param2-presence-penalty", params.presence_penalty ?? 0.4);
+  setVal("param2-frequency-penalty", params.frequency_penalty ?? 0.0);
+  setVal("param2-num-ctx", params.num_ctx ?? 131072);
+  setVal("param2-num-predict", params.num_predict ?? 4096);
 
   updateParamDisplays();
-
+  updateParamDisplays("2");
   updateApiKeyField();
-  showStep(1);
+  updateApiKeyField2();
+
+  showStep(0);
   document.getElementById("create-modal").classList.remove("hidden");
-  select.focus();
 }
 
 export function closeCreateModal() {
@@ -122,8 +221,6 @@ export function updateApiKeyField() {
 
   const provider = model.provider || "";
   const hasEnv = state.envStatus[provider] === true;
-
-  // Ollama 创建时不要求 Key，连接失败时再处理
   if (hasEnv || provider === "ollama") {
     field.style.display = "none";
     input.value = "";
@@ -131,24 +228,35 @@ export function updateApiKeyField() {
   } else {
     field.style.display = "block";
     const nameMap = { deepseek: "DeepSeek", dashscope: "DashScope" };
-    const providerName = nameMap[provider] || provider;
-    label.textContent = `${providerName} API 密钥`;
-    input.placeholder = `请输入你的 ${providerName} API Key`;
+    label.textContent = `${nameMap[provider] || provider} API 密钥`;
+    input.placeholder = `请输入你的 ${nameMap[provider] || provider} API Key`;
     input.required = true;
   }
 }
 
-/** 更新所有参数滑块的数值显示 */
-function updateParamDisplays() {
-  const ids = [
-    "temperature", "top-p", "min-p", "top-k",
-    "repeat-penalty", "presence-penalty", "frequency-penalty",
-  ];
-  ids.forEach((id) => {
-    const input = document.getElementById(`param-${id}`);
-    const display = document.getElementById(`param-${id}-val`);
-    if (input && display) display.textContent = input.value;
-  });
+export function updateApiKeyField2() {
+  const select = document.getElementById("create-model2-select");
+  const field = document.getElementById("api-key-field-2");
+  const label = document.getElementById("api-key-label-2");
+  const input = document.getElementById("create-api-key-2");
+
+  const modelKey = select.value;
+  const model = state.models.find((m) => m.key === modelKey);
+  if (!model) return;
+
+  const provider = model.provider || "";
+  const hasEnv = state.envStatus[provider] === true;
+  if (hasEnv || provider === "ollama") {
+    field.style.display = "none";
+    input.value = "";
+    input.required = false;
+  } else {
+    field.style.display = "block";
+    const nameMap = { deepseek: "DeepSeek", dashscope: "DashScope" };
+    label.textContent = `${nameMap[provider] || provider} API 密钥`;
+    input.placeholder = `请输入你的 ${nameMap[provider] || provider} API Key`;
+    input.required = true;
+  }
 }
 
 // ── Export modal ──
@@ -157,13 +265,11 @@ export async function openExportModal() {
   const idx = state.currentSlotIndex;
   if (idx === null) return;
 
-  // 防止重复弹窗
   if (document.querySelector(".export-content")) return;
 
   try {
     const data = await apiGet(`/api/slots/${idx}/chat/export`);
 
-    // Build markdown export content
     const lines = [
       `# ${data.title || "对话导出"}`,
       "",
@@ -186,7 +292,6 @@ export async function openExportModal() {
 
     const content = lines.join("\n");
 
-    // Show in modal
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.innerHTML = `
@@ -235,15 +340,61 @@ export function closeHelpModal() {
 
 // ── Init modal event listeners ──
 
+function syncSystemPromptSource() {
+  // 仅双模型模式同步（单模型模式的提示词在 step3 单独输入，不可被覆盖）
+  if (!isDualMode) return;
+  const sp = document.getElementById("create-system-prompt").value;
+  const spSingle = document.getElementById("create-system-prompt-single");
+  if (spSingle) spSingle.value = sp;
+}
+
 export function initModalListeners() {
   const createModal = document.getElementById("create-modal");
 
-  // ── 步骤导航 ──
+  // ── 模式选择 ──
+  document.querySelectorAll('input[name="dual-mode"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const singleRadio = document.getElementById("dual-option-single").querySelector("input");
+      isDualMode = !singleRadio.checked;
+      if (isDualMode) {
+        // 双模型模式
+        document.getElementById("field-model1-name").style.display = "block";
+        document.getElementById("step1-icon").textContent = MODEL1_ICON;
+        document.getElementById("step1-title").textContent = "模型 1 配置";
+        // Step 2 显示模型1系统提示词
+        document.getElementById("step2-prompt-field").style.display = "";
+        // Step 3 显示模型2配置
+        document.getElementById("step3-single").style.display = "none";
+        document.getElementById("step3-dual").style.display = "block";
+        document.getElementById("step3-icon").textContent = MODEL2_ICON;
+        document.getElementById("step3-title").textContent = "模型 2 配置";
+        populateModelSelect("create-model2-select", "DeepSeek-v4-flash");
+      } else {
+        document.getElementById("field-model1-name").style.display = "none";
+        document.getElementById("step1-icon").textContent = "🤖";
+        document.getElementById("step1-title").textContent = "选择模型";
+        // Step 2 隐藏系统提示词（单模型的提示词在 Step 3）
+        document.getElementById("step2-prompt-field").style.display = "none";
+        document.getElementById("step3-single").style.display = "";
+        document.getElementById("step3-dual").style.display = "none";
+        document.getElementById("step3-icon").textContent = "💬";
+        document.getElementById("step3-title").textContent = "设置提示词";
+      }
+      showStep(0); // 停留在步骤0，但更新UI
+    });
+  });
 
-  // 下一步
+  // ── 步骤导航 ──
   document.getElementById("wizard-next").addEventListener("click", () => {
-    if (currentStep === 1) {
-      // 校验 Step 1：API Key
+    if (currentStep === 0) {
+      // 从模式选择进入
+      if (isDualMode) {
+        showStep(1);
+      } else {
+        showStep(1);
+      }
+    } else if (currentStep === 1) {
+      // Step 1 → Step 2（校验API Key）
       const apiKeyField = document.getElementById("api-key-field");
       const apiKeyInput = document.getElementById("create-api-key");
       if (apiKeyField.style.display !== "none" && !apiKeyInput.value.trim()) {
@@ -253,46 +404,115 @@ export function initModalListeners() {
       }
       showStep(2);
     } else if (currentStep === 2) {
-      showStep(3);
+      if (isDualMode) {
+        // 双模型: step 2 → step 3 (模型2)
+        syncSystemPromptSource();
+        showStep(3);
+      } else {
+        // 单模型: step 2 的参数结束 → step 3 提示词
+        syncSystemPromptSource();
+        showStep(3);
+      }
+    } else if (currentStep === 3) {
+      if (isDualMode) {
+        // 校验模型2 API Key
+        const apiKeyField2 = document.getElementById("api-key-field-2");
+        const apiKeyInput2 = document.getElementById("create-api-key-2");
+        if (apiKeyField2.style.display !== "none" && !apiKeyInput2.value.trim()) {
+          showToast("请填写模型 2 所需的 API 密钥", "warning");
+          apiKeyInput2.focus();
+          return;
+        }
+        showStep(4);
+      }
+    } else if (currentStep === 4) {
+      if (isDualMode) {
+        showStep(5); // 标题
+      }
     }
   });
 
-  // 上一步
   document.getElementById("wizard-prev").addEventListener("click", () => {
-    if (currentStep > 1) showStep(currentStep - 1);
+    if (currentStep > 0) {
+      showStep(currentStep - 1);
+    }
   });
 
-  // 取消
   document.getElementById("wizard-cancel").addEventListener("click", closeCreateModal);
 
-  // 创建存档
+  // ── 创建存档 ──
   document.getElementById("wizard-create").addEventListener("click", async () => {
     const idx = pendingCreateIndex;
     if (idx === null) return;
 
-    const select = document.getElementById("create-model-select");
-    const promptInput = document.getElementById("create-system-prompt");
-    const apiKeyInput = document.getElementById("create-api-key");
-    const apiKeyField = document.getElementById("api-key-field");
-    const titleInput = document.getElementById("create-title");
+    if (isDualMode) {
+      // ── 双模型创建 ──
+      const model1Select = document.getElementById("create-model-select");
+      const model1Name = document.getElementById("create-model1-name").value.trim() || "1号";
+      const model1Model = model1Select.value;
+      const model1Key = document.getElementById("api-key-field").style.display !== "none"
+        ? document.getElementById("create-api-key").value.trim() : "";
+      const model1Prompt = document.getElementById("create-system-prompt").value.trim() || "使用中文回答";
+      const model1Params = getParamValues("");
 
-    const model = select.value;
-    const systemPrompt = promptInput.value.trim() || "使用中文回答";
-    const apiKey = apiKeyField.style.display !== "none" ? apiKeyInput.value.trim() : "";
+      const model2Select = document.getElementById("create-model2-select");
+      const model2Name = document.getElementById("create-model2-name").value.trim() || "2号";
+      const model2Model = model2Select.value;
+      const model2Key = document.getElementById("api-key-field-2").style.display !== "none"
+        ? document.getElementById("create-api-key-2").value.trim() : "";
+      const model2Prompt = document.getElementById("create-system-prompt-2").value.trim() || "使用中文回答";
+      const model2Params = getParamValues("2");
 
-    try {
-      await apiPost(`/api/slots/${idx}`, {
-        model,
-        system_prompt: systemPrompt,
-        api_key: apiKey,
-        title: titleInput.value.trim(),
-        params: getParamValues(),
-      });
-      closeCreateModal();
-      showToast("存档创建成功", "success");
-      await openSlot(idx);
-    } catch (e) {
-      showToast("创建失败: " + e.message, "error");
+      try {
+        await apiPost(`/api/slots/${idx}`, {
+          model: model1Model,
+          system_prompt: model1Prompt,
+          api_key: model1Key,
+          params: model1Params,
+          title: document.getElementById("create-title-dual").value.trim(),
+          dual_enabled: true,
+          model1_name: model1Name,
+          model2_name: model2Name,
+          pass_mode: document.querySelector('input[name="pass-mode"]:checked')?.value || "user",
+          model2: {
+            model: model2Model,
+            system_prompt: model2Prompt,
+            api_key: model2Key,
+            params: model2Params,
+          },
+        });
+        closeCreateModal();
+        showToast("双模型存档创建成功", "success");
+        await openSlot(idx);
+      } catch (e) {
+        showToast("创建失败: " + e.message, "error");
+      }
+    } else {
+      // ── 单模型创建（原有逻辑） ──
+      const select = document.getElementById("create-model-select");
+      const promptInput = document.getElementById("create-system-prompt-single");
+      const apiKeyInput = document.getElementById("create-api-key");
+      const apiKeyField = document.getElementById("api-key-field");
+      const titleInput = document.getElementById("create-title");
+
+      const model = select.value;
+      const systemPrompt = promptInput.value.trim() || "使用中文回答";
+      const apiKey = apiKeyField.style.display !== "none" ? apiKeyInput.value.trim() : "";
+
+      try {
+        await apiPost(`/api/slots/${idx}`, {
+          model,
+          system_prompt: systemPrompt,
+          api_key: apiKey,
+          title: titleInput.value.trim(),
+          params: getParamValues(""),
+        });
+        closeCreateModal();
+        showToast("存档创建成功", "success");
+        await openSlot(idx);
+      } catch (e) {
+        showToast("创建失败: " + e.message, "error");
+      }
     }
   });
 
@@ -301,32 +521,37 @@ export function initModalListeners() {
     if (e.target === createModal) closeCreateModal();
   });
 
-  // 模型切换 → 更新 API Key 字段
+  // 模型切换 API Key 联动
   document.getElementById("create-model-select").addEventListener("change", updateApiKeyField);
+  document.getElementById("create-model2-select").addEventListener("change", updateApiKeyField2);
 
-  // ── 参数滑块联动 ──
-  const rangeIds = [
-    "temperature", "top-p", "min-p", "top-k",
-    "repeat-penalty", "presence-penalty", "frequency-penalty",
-  ];
-  rangeIds.forEach((id) => {
-    const input = document.getElementById(`param-${id}`);
-    if (input) {
-      input.addEventListener("input", () => {
-        const display = document.getElementById(`param-${id}-val`);
-        if (display) display.textContent = input.value;
-      });
-    }
-  });
+  // 参数滑块联动
+  const setupRangeListeners = (suffix = "") => {
+    const ids = [
+      "temperature", "top-p", "min-p", "top-k",
+      "repeat-penalty", "presence-penalty", "frequency-penalty",
+    ];
+    ids.forEach((id) => {
+      const input = document.getElementById(`param${suffix}-${id}`);
+      if (input) {
+        input.addEventListener("input", () => {
+          const display = document.getElementById(`param${suffix}-${id}-val`);
+          if (display) display.textContent = input.value;
+        });
+      }
+    });
+  };
+  setupRangeListeners("");
+  setupRangeListeners("2");
 
-  // ── 关闭确认弹窗 ──
+  // 确认弹窗
   document.getElementById("modal-overlay").addEventListener("click", (e) => {
     if (e.target === document.getElementById("modal-overlay")) {
       document.getElementById("modal-overlay").classList.add("hidden");
     }
   });
 
-  // ── 关闭帮助弹窗 ──
+  // 帮助弹窗
   document.getElementById("help-modal").addEventListener("click", (e) => {
     if (e.target === document.getElementById("help-modal")) {
       closeHelpModal();

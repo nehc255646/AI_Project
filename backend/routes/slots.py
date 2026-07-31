@@ -12,6 +12,7 @@ from models import (
     CreateSlotRequest,
     DeleteMessageRequest,
     EditMessageRequest,
+    DualToggleRequest,
     SlotDetail,
     ExportData,
 )
@@ -39,8 +40,31 @@ def create_slot(slot_index: int, req: CreateSlotRequest):
     cfg = validate_model_key(req.model)
     check_api_key(cfg["provider"], req.api_key)
 
+    # 构建 dual_config
+    dual_config = None
+    if req.dual_enabled:
+        m2 = req.model2
+        if m2:
+            m2_cfg = validate_model_key(m2.model)
+            check_api_key(m2_cfg["provider"], m2.api_key)
+        dual_config = {
+            "enabled": True,
+            "response_mode": "both",
+            "first_model": "model1",
+            "pass_mode": req.pass_mode or "user",
+            "model1_name": req.model1_name or "",
+            "model2_name": req.model2_name or "",
+            "model2": {
+                "model": m2.model if m2 else req.model,
+                "system_prompt": m2.system_prompt if m2 else "使用中文回答",
+                "api_key": m2.api_key if m2 else "",
+                "params": m2.params if m2 and m2.params else {},
+            } if m2 else None,
+        }
+
     success = get_slot_mgr().create_slot(
-        slot_index, req.model, req.system_prompt, req.api_key, req.params, req.title
+        slot_index, req.model, req.system_prompt, req.api_key, req.params, req.title,
+        dual_config=dual_config,
     )
     if not success:
         error("create_failed", "创建存档失败", 500)
@@ -57,6 +81,7 @@ def delete_slot(slot_index: int):
 @router.get("/api/slots/{slot_index}/chat")
 def get_slot_chat(slot_index: int):
     data = resolve_slot(slot_index)
+    dual_config = data.get("dual_config", {}) or {}
     return SlotDetail(
         index=slot_index,
         model=data.get("model", ""),
@@ -65,6 +90,10 @@ def get_slot_chat(slot_index: int):
         created_at=data.get("created_at", ""),
         updated_at=data.get("updated_at", ""),
         history=data.get("history", []),
+        dual_enabled=dual_config.get("enabled", False),
+        dual_config=dual_config,
+        response_mode=dual_config.get("response_mode", "both"),
+        first_model=dual_config.get("first_model", "model1"),
     ).model_dump()
 
 
@@ -158,6 +187,25 @@ def update_slot_api_key(slot_index: int, req: dict):
         error("empty_api_key", "API Key 不能为空", 400)
     get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
     return {"ok": True}
+
+
+@router.patch("/api/slots/{slot_index}/dual-toggle")
+def toggle_dual_mode(slot_index: int, req: DualToggleRequest):
+    """切换双模型的回复模式。"""
+    data = resolve_slot(slot_index)
+    dual_config = data.get("dual_config", {}) or {}
+    if not dual_config.get("enabled"):
+        error("not_dual_mode", "该存档不是双模型模式", 400)
+
+    if req.response_mode not in ("model1", "model2", "both"):
+        error("invalid_response_mode", "回复模式无效", 400)
+    if req.first_model not in ("model1", "model2"):
+        error("invalid_first_model", "先回复模型无效", 400)
+
+    dual_config["response_mode"] = req.response_mode
+    dual_config["first_model"] = req.first_model
+    get_slot_mgr().update_dual_config(slot_index, dual_config)
+    return {"ok": True, "dual_config": dual_config}
 
 
 @router.get("/api/slots/{slot_index}/chat/export")
