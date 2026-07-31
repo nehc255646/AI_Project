@@ -124,6 +124,7 @@ export function showEmptyState() {
       </div>
     `;
   }
+  updateContinueBtn();
 }
 
 export function renderMessages(history) {
@@ -176,6 +177,7 @@ export function renderMessages(history) {
       }
     }
   });
+  updateContinueBtn();
 }
 
 export function addMessage(role, content, isStreaming = false, messageId = null, label = null) {
@@ -257,6 +259,14 @@ export function finishStreaming(bubble) {
   } else if (bubble.classList) {
     bubble.classList.remove("streaming");
   }
+}
+
+/** 根据当前是否有 AI 回复及是否在流式输出中，更新「继续回复」按钮可用状态 */
+function updateContinueBtn() {
+  const btn = el("continue-btn");
+  if (!btn) return;
+  const hasAssistant = !!document.querySelector("#chat-messages .message.assistant");
+  btn.disabled = state.streaming || !hasAssistant;
 }
 
 // ── 侧边栏 ──
@@ -372,6 +382,7 @@ export function setStreaming(val) {
       : "AI 可能会犯错，请验证重要信息";
   }
   if (messageInput) messageInput.disabled = val;
+  updateContinueBtn();
 }
 
 // ── 在聊天区添加错误提示 ──

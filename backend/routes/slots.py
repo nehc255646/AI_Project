@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter
 
-from config import SLOT_COUNT
+from config import SLOT_COUNT, MODEL_CONFIG
 from models import (
     CreateSlotRequest,
     DeleteMessageRequest,
@@ -190,15 +190,24 @@ def update_slot_title(slot_index: int, req: dict):
 def update_slot_api_key(slot_index: int, req: dict):
     """更新存档的 API Key（用于 Ollama 连接失败后补填）。
 
-    双模型模式下同时更新模型2的 API Key，避免模型2重试仍缺 Key。
+    只把 Key 写给 provider 为 ollama 的模型，避免把 Ollama Cloud Key
+    误写到 DeepSeek/DashScope 模型上，导致重试时该模型认证失败。
     """
     data = resolve_slot(slot_index)
     api_key = (req.get("api_key") or "").strip()
     if not api_key:
         error("empty_api_key", "API Key 不能为空", 400)
-    get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
+
+    # 模型1（存档主模型）为 Ollama 时才更新 slot.api_key
+    slot_cfg = MODEL_CONFIG.get(data.get("model", "")) or {}
+    if slot_cfg.get("provider") == "ollama":
+        get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
+
+    # 模型2 为 Ollama 时才更新 dual_config.model2.api_key
     dual_config = data.get("dual_config", {}) or {}
-    if dual_config.get("enabled") and dual_config.get("model2"):
+    m2 = dual_config.get("model2") or {}
+    m2_cfg = MODEL_CONFIG.get(m2.get("model", "")) or {}
+    if dual_config.get("enabled") and m2_cfg.get("provider") == "ollama":
         dual_config["model2"]["api_key"] = api_key
         get_slot_mgr().update_dual_config(slot_index, dual_config)
     return {"ok": True}

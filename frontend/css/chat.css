@@ -717,6 +717,32 @@
   color: var(--text-muted);
 }
 
+.continue-btn {
+  height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.continue-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--glass-border-hover);
+  background: var(--bg-surface-hover);
+}
+.continue-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .send-btn {
   width: 40px;
   height: 40px;

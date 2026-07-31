@@ -33,7 +33,7 @@ if %errorlevel% equ 0 (
 echo [4/4] Starting server...
 cd /d "%~dp0backend"
 
-:: å¯åŠ¨åŽç«¯å¹¶è®°å½• PIDï¼ˆé€€å‡ºæ—¶åªç»“æŸè‡ªå·±å¯åŠ¨çš„è¿›ç¨‹ï¼‰
+:: Æô¶¯ºó¶Ë²¢¼ÇÂ¼ PID£¨ÍË³öÊ±Ö»½áÊø×Ô¼ºÆô¶¯µÄ½ø³Ì£©
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "$p = Start-Process python -ArgumentList '-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden -PassThru; $p.Id"`) do set SERVER_PID=%%p
 
 start http://localhost:8000
@@ -44,7 +44,7 @@ echo   Visit http://localhost:8000
 
 pause
 
-:: åªç»“æŸè‡ªå·±å¯åŠ¨çš„åŽç«¯è¿›ç¨‹ï¼ˆ/t è¿žå¸¦ç»ˆæ­¢ reload å­è¿›ç¨‹ï¼‰
+:: Ö»½áÊø×Ô¼ºÆô¶¯µÄºó¶Ë½ø³Ì£¨/t Á¬´øÖÕÖ¹ reload ×Ó½ø³Ì£©
 if defined SERVER_PID taskkill /f /t /pid %SERVER_PID% >nul 2>&1
 endlocal
 

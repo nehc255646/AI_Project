@@ -295,12 +295,15 @@ class SlotManager:
         try:
             with self._transaction() as conn:
                 with conn.cursor() as cursor:
-                    cursor.executemany(
-                        "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
-                        [(slot_id, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in messages],
-                    )
-                    first_id = cursor.lastrowid
-                    ids = list(range(first_id, first_id + len(messages)))
+                    # 逐条插入并记录每条真实 ID：executemany 在内容过长时会被拆成
+                    # 多条 INSERT，此时 lastrowid 只反映最后一条，无法推算出全部 ID。
+                    ids = []
+                    for m in messages:
+                        cursor.execute(
+                            "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
+                            (slot_id, m.get("role", ""), m.get("content", ""), m.get("source", "")),
+                        )
+                        ids.append(cursor.lastrowid)
                     cursor.execute(
                         "UPDATE slots SET updated_at = %s WHERE id = %s",
                         (self._now(), slot_id),
@@ -360,6 +363,20 @@ class SlotManager:
             return True
         except pymysql.Error as e:
             logger.error(f"clear_all_messages({slot_id}) 失败: {e}")
+            return False
+
+    def touch_slot(self, index: int) -> bool:
+        """仅刷新存档的 updated_at（继续回复等只改内容不新增消息的场景）。"""
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), index),
+                    )
+            return True
+        except pymysql.Error as e:
+            logger.error(f"touch_slot({index}) 失败: {e}")
             return False
 
     def update_message_content(self, message_id: int, content: str) -> bool:

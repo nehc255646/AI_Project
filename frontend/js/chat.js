@@ -128,6 +128,9 @@ export async function sendMessage() {
   if (!text || state.streaming) return;
   if (state.currentSlotIndex === null) return;
 
+  // 清理上一轮遗留的错误提示，避免错误气泡在聊天区越积越多
+  document.querySelectorAll("#chat-messages .message.error").forEach((el) => el.remove());
+
   input.value = "";
   input.style.height = "auto";
 
@@ -482,6 +485,398 @@ function rollbackMessages(text) {
   }
 }
 
+// ── 继续回复（不输入消息，让 AI 继续对话） ──
+
+export async function continueLastReply() {
+  if (state.streaming) return;
+  if (state.currentSlotIndex === null) return;
+
+  // 双模型：相当于用户留空，两个模型按配置正常回复一轮（各新建气泡）
+  if (state.dualEnabled) {
+    await continueDualTurn();
+    return;
+  }
+
+  // ── 单模型：延续最后一条回复（合并式） ──
+  const msgs = document.querySelectorAll("#chat-messages > .message.assistant");
+  const lastMsgDiv = msgs[msgs.length - 1];
+  if (!lastMsgDiv) {
+    showToast("暂无可继续的回复", "warning");
+    return;
+  }
+  const bubble = lastMsgDiv.querySelector(".bubble");
+  const contentDiv = bubble ? getContent(bubble) : null;
+  if (!contentDiv) {
+    showToast("无法定位上一条回复内容", "error");
+    return;
+  }
+  const messageId = parseInt(lastMsgDiv.dataset.messageId, 10) || null;
+  if (!messageId) {
+    showToast("无法定位消息 ID，请刷新对话后重试", "error");
+    return;
+  }
+
+  const originalText = contentDiv.textContent || "";
+  let fullContent = originalText;
+  let gotDone = false;
+  let errorHandled = false;
+  let aborted = false;
+  let idleCheck = null;
+
+  setStreaming(true);
+  state.abortController = new AbortController();
+  state.streamCancelled = false;
+  state.currentReader = null;
+  if (bubble) bubble.classList.add("streaming");
+
+  try {
+    const response = await fetch(`/api/slots/${state.currentSlotIndex}/chat/continue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: state.abortController.signal,
+    });
+
+    if (!response.ok) {
+      let errMsg = `请求失败: ${response.status}`;
+      try {
+        const err = await response.json();
+        errMsg = err.message || errMsg;
+      } catch (_) { /* 忽略 */ }
+      throw new Error(errMsg);
+    }
+
+    const reader = response.body.getReader();
+    state.currentReader = reader;
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastChunkTime = Date.now();
+    const IDLE_TIMEOUT = 60_000;
+    idleCheck = setInterval(() => {
+      if (Date.now() - lastChunkTime > IDLE_TIMEOUT) {
+        state.abortController?.abort();
+        showToast("响应超时：长时间未收到数据", "error");
+        clearInterval(idleCheck);
+      }
+    }, 10_000);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (state.streamCancelled || done) {
+        clearInterval(idleCheck); idleCheck = null;
+        break;
+      }
+      lastChunkTime = Date.now();
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          switch (event.type) {
+            case "chunk": {
+              fullContent += event.content || "";
+              contentDiv.textContent = fullContent;
+              scrollToBottom();
+              break;
+            }
+            case "done": {
+              gotDone = true;
+              contentDiv.innerHTML = renderMarkdown(fullContent);
+              enhanceCodeBlocks(contentDiv);
+              break;
+            }
+            case "error": {
+              errorHandled = true;
+              // 后端尚未落库，恢复原内容并提示
+              contentDiv.textContent = originalText;
+              if (event.code === "ollama_need_key") {
+                showOllamaKeyCard(event.content, () => continueLastReply());
+              } else {
+                const msgsMap = {
+                  auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
+                  rate_limited: "⏳ 请求过于频繁，请稍后重试",
+                  quota_exceeded: "💰 API 额度不足，请检查账户余额",
+                  ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
+                  config_error: "⚙️ 模型配置错误",
+                };
+                addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
+              }
+              break;
+            }
+          }
+        } catch (_) { /* 忽略解析错误 */ }
+      }
+    }
+  } catch (e) {
+    if (idleCheck !== null) clearInterval(idleCheck);
+    if (state.streamCancelled || e.name === "AbortError") {
+      aborted = true;
+    } else {
+      errorHandled = true;
+      contentDiv.textContent = originalText;
+      addErrorMessage(`请求失败: ${e.message}`);
+    }
+  } finally {
+    if (state.streamCancelled) {
+      contentDiv.textContent = originalText;
+      showToast("已取消", "info");
+    } else if (aborted) {
+      contentDiv.textContent = originalText;
+    }
+    finishStreaming(bubble);
+  }
+
+  // 刷新存档数据
+  if (state.currentSlotIndex !== null) {
+    try {
+      state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
+      state.dualEnabled = state.currentSlotData.dual_enabled || false;
+      state.responseMode = state.currentSlotData.response_mode || "both";
+      state.firstModel = state.currentSlotData.first_model || "model1";
+      // 流异常结束（未收到 done/error）时用 DB 数据重建，保证前后端一致
+      if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
+        renderMessages(state.currentSlotData.history || []);
+      }
+      updateSidebarInfo();
+    } catch (_) { /* 静默失败 */ }
+  }
+
+  setStreaming(false);
+  state.streamCancelled = false;
+  state.currentReader = null;
+}
+
+/** 双模型「继续」：跳过用户消息，两个模型按 response_mode / first_model 正常回复一轮 */
+async function continueDualTurn() {
+  let bubbles = [];       // [{el, role, fullContent, msgId}]
+  let currentBubble = null;
+  let gotDone = false;
+  let errorHandled = false;
+  let aborted = false;
+  let idleCheck = null;
+
+  const removeNewBubbles = () => {
+    bubbles.forEach((b) => {
+      const d = getMsgDiv(b.el);
+      if (d) d.remove();
+    });
+    bubbles = [];
+    if (currentBubble) {
+      const d = getMsgDiv(currentBubble);
+      if (d) d.remove();
+      currentBubble = null;
+    }
+  };
+
+  setStreaming(true);
+  state.abortController = new AbortController();
+  state.streamCancelled = false;
+  state.currentReader = null;
+
+  try {
+    const response = await fetch(`/api/slots/${state.currentSlotIndex}/chat/continue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: state.abortController.signal,
+    });
+
+    if (!response.ok) {
+      let errMsg = `请求失败: ${response.status}`;
+      try {
+        const err = await response.json();
+        errMsg = err.message || errMsg;
+      } catch (_) { /* 忽略 */ }
+      throw new Error(errMsg);
+    }
+
+    const reader = response.body.getReader();
+    state.currentReader = reader;
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastChunkTime = Date.now();
+    const IDLE_TIMEOUT = 60_000;
+    idleCheck = setInterval(() => {
+      if (Date.now() - lastChunkTime > IDLE_TIMEOUT) {
+        state.abortController?.abort();
+        showToast("响应超时：长时间未收到数据", "error");
+        clearInterval(idleCheck);
+      }
+    }, 10_000);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (state.streamCancelled || done) {
+        clearInterval(idleCheck); idleCheck = null;
+        break;
+      }
+      lastChunkTime = Date.now();
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          switch (event.type) {
+            // 模型开始回复：新建气泡
+            case "model_start": {
+              const icon = event.icon || "🤖";
+              const name = event.name || "";
+              const label = `${icon} ${name}`.trim();
+              currentBubble = addMessage("assistant", "", true, null, label);
+              bubbles.push({ el: currentBubble, role: event.role, fullContent: "", msgId: null });
+              scrollToBottom();
+              break;
+            }
+            // 流式数据块
+            case "chunk": {
+              let entry = currentBubble ? bubbles[bubbles.length - 1] : null;
+              if (!entry) break;
+              entry.fullContent += event.content || "";
+              const contentDiv = getContent(entry.el);
+              if (contentDiv) contentDiv.textContent = entry.fullContent;
+              scrollToBottom();
+              break;
+            }
+            // 单个模型完成
+            case "model_done": {
+              const entry = bubbles.find((b) => b.role === event.role || b.el === currentBubble);
+              if (entry) {
+                entry.msgId = event.message_id;
+                if (event.message_id) {
+                  const msgDiv = getMsgDiv(entry.el);
+                  if (msgDiv) msgDiv.dataset.messageId = event.message_id;
+                }
+                const contentDiv = getContent(entry.el);
+                if (contentDiv) {
+                  contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+                  enhanceCodeBlocks(contentDiv);
+                }
+                finishStreaming(entry.el);
+              }
+              currentBubble = null;
+              break;
+            }
+            // 完成事件
+            case "done": {
+              gotDone = true;
+              if (event.message_ids) {
+                bubbles.forEach((b, i) => {
+                  if (event.message_ids[i]) {
+                    const d = getMsgDiv(b.el);
+                    if (d) d.dataset.messageId = event.message_ids[i];
+                  }
+                });
+              }
+              break;
+            }
+            // 错误处理
+            case "error": {
+              errorHandled = true;
+              if (event.code === "ollama_need_key") {
+                // 后端整体回滚本轮，移除全部新建气泡
+                removeNewBubbles();
+                showOllamaKeyCard(event.content, () => continueLastReply());
+              } else {
+                // 非补 Key：保留已完成模型的气泡，移除失败模型未完成的气泡
+                bubbles.forEach((b) => {
+                  if (!b.msgId) {
+                    const d = getMsgDiv(b.el);
+                    if (d) d.remove();
+                  }
+                });
+                bubbles = bubbles.filter((b) => b.msgId);
+                if (currentBubble) {
+                  const d = getMsgDiv(currentBubble);
+                  if (d) d.remove();
+                  currentBubble = null;
+                }
+                const msgsMap = {
+                  auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
+                  rate_limited: "⏳ 请求过于频繁，请稍后重试",
+                  quota_exceeded: "💰 API 额度不足，请检查账户余额",
+                  ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
+                  config_error: "⚙️ 模型配置错误",
+                };
+                addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
+              }
+              break;
+            }
+          }
+        } catch (_) { /* 忽略解析错误 */ }
+      }
+    }
+  } catch (e) {
+    if (idleCheck !== null) clearInterval(idleCheck);
+    if (state.streamCancelled || e.name === "AbortError") {
+      aborted = true;
+    } else {
+      errorHandled = true;
+      removeNewBubbles();
+      addErrorMessage(`请求失败: ${e.message}`);
+    }
+  } finally {
+    if (state.streamCancelled || aborted) {
+      removeNewBubbles();
+      if (state.streamCancelled) showToast("已取消", "info");
+    }
+  }
+
+  // 刷新存档数据
+  if (state.currentSlotIndex !== null) {
+    try {
+      state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
+      state.dualEnabled = state.currentSlotData.dual_enabled || false;
+      state.responseMode = state.currentSlotData.response_mode || "both";
+      state.firstModel = state.currentSlotData.first_model || "model1";
+      // 流异常结束（未收到 done/error）时用 DB 数据重建，保证前后端一致
+      if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
+        renderMessages(state.currentSlotData.history || []);
+      }
+      updateSidebarInfo();
+    } catch (_) { /* 静默失败 */ }
+  }
+
+  setStreaming(false);
+  state.streamCancelled = false;
+  state.currentReader = null;
+}
+
+/** 补填 Ollama Cloud Key 的内联卡片（保存后执行 onSaved 回调） */
+function showOllamaKeyCard(content, onSaved) {
+  const container = document.getElementById("chat-messages");
+  const card = document.createElement("div");
+  card.className = "message error";
+  card.innerHTML = `<div class="bubble">
+    <div style="margin-bottom:12px">⚠️ ${escapeHtml(content || "无法连接")}</div>
+    <input type="password" id="ollama-key-input" class="create-input"
+      placeholder="输入 Ollama Cloud API Key" autocomplete="off"
+      style="margin-bottom:10px;width:100%" />
+    <button id="ollama-key-save-btn" class="modal-btn modal-btn-confirm"
+      style="width:100%;padding:10px">保存并重试</button>
+  </div>`;
+  container?.appendChild(card);
+  setTimeout(() => document.getElementById("ollama-key-input")?.focus(), 100);
+  document.getElementById("ollama-key-save-btn")?.addEventListener("click", async () => {
+    const key = document.getElementById("ollama-key-input")?.value.trim();
+    if (!key) { showToast("请输入 API Key", "warning"); return; }
+    try {
+      await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key });
+      card.remove();
+      onSaved();
+    } catch (e) {
+      showToast("保存失败: " + e.message, "error");
+    }
+  });
+}
+
 // ── 重新生成（仅单模型） ──
 
 export async function regenerate(userMsgId) {
@@ -660,6 +1055,10 @@ export async function setDualResponseMode(mode, firstModel) {
     });
     state.responseMode = resp.dual_config?.response_mode || mode;
     state.firstModel = resp.dual_config?.first_model || firstModel || "model1";
+    // 同步本地存档数据，避免后续读取到旧的 dual_config
+    if (state.currentSlotData) {
+      state.currentSlotData.dual_config = resp.dual_config || state.currentSlotData.dual_config;
+    }
     updateSidebarInfo();
     showToast(
       mode === "both" ? "已设为同时回复" :

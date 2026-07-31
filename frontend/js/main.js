@@ -23,7 +23,7 @@ import {
 import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal } from "./modals.js";
 
 // ── 对话 ──
-import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode } from "./chat.js";
+import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode, continueLastReply } from "./chat.js";
 
 // ── 工具 ──
 import { $ } from "./utils.js";
@@ -102,6 +102,9 @@ function setupEventListeners() {
 
   // 发送
   $("#send-btn").addEventListener("click", sendMessage);
+
+  // 继续回复（不输入消息，让 AI 接着上一条回复继续）
+  $("#continue-btn").addEventListener("click", continueLastReply);
 
   // 取消流式回复
   $("#cancel-stream-btn").addEventListener("click", cancelStream);
