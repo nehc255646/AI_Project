@@ -70,18 +70,11 @@ async def chat(req: ChatRequest):
 
             # ── 单模型模式（原有逻辑） ──
             if not dual_enabled or (not run_model1 and not run_model2):
-                # 退化为单模型
+                # 退化为单模型（未开启双模型，或双模型无有效回复模式）
                 actual_model = model
                 actual_prompt = system_prompt
                 actual_key = api_key
                 actual_params = params
-                if dual_enabled and run_model2:
-                    # 仅模型2回复（单模型退化）
-                    m2 = dual_config.get("model2", {})
-                    actual_model = m2.get("model", model)
-                    actual_prompt = m2.get("system_prompt", system_prompt)
-                    actual_key = m2.get("api_key", api_key)
-                    actual_params = m2.get("params", params)
 
                 cfg = MODEL_CONFIG.get(actual_model)
                 max_tokens = cfg.get("max_tokens") if cfg else None
@@ -164,7 +157,7 @@ async def chat(req: ChatRequest):
                     role_name = model1_name
                     role_icon = MODEL1_ICON
                 else:
-                    m2 = dual_config.get("model2", {})
+                    m2 = dual_config.get("model2") or {}
                     cfg_key = m2.get("model", model)
                     cfg_system = m2.get("system_prompt", system_prompt)
                     cfg_key_raw = m2.get("api_key", api_key)
@@ -189,10 +182,14 @@ async def chat(req: ChatRequest):
                     messages = [{"role": "system", "content": cfg_system}, *_clean(prev)]
                     # 用户原始消息（独立一条）
                     messages.append({"role": "user", "content": user_content})
-                    # 第一个模型的回答包装为 user 消息（独立另一条）
+                    # 第一个模型的回答传入
                     first_name = model2_name if first_role == "model2" else model1_name
                     pass_mode = dual_config.get("pass_mode", "user")  # "user" | "assistant"
-                    messages.append({"role": pass_mode, "content": f"{first_name}: {first_resp}"})
+                    if pass_mode == "assistant":
+                        messages.append({"role": "assistant", "content": f"{first_name}: {first_resp}"})
+                    else:
+                        # 合并进上一条 user 消息，避免连续两条 user 消息
+                        messages[-1]["content"] = f"{user_content}\n\n[{first_name} 的回复]\n{first_resp}"
 
                 # 发出 model_start 事件
                 yield f"data: {json.dumps({
@@ -203,12 +200,23 @@ async def chat(req: ChatRequest):
                 })}\n\n"
 
                 chunks = []
-                async for chunk in get_ai_client().stream_chat(
-                    messages, cfg_key, api_key=cfg_key_raw,
-                    max_tokens=max_tokens, params=cfg_params,
-                ):
-                    chunks.append(chunk)
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk, 'role': role})}\n\n"
+                try:
+                    async for chunk in get_ai_client().stream_chat(
+                        messages, cfg_key, api_key=cfg_key_raw,
+                        max_tokens=max_tokens, params=cfg_params,
+                    ):
+                        chunks.append(chunk)
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk, 'role': role})}\n\n"
+                except Exception as e:
+                    # 后续模型失败：保留已保存的用户消息与第一个模型回复；
+                    # 但 NEED_KEY 需整体回滚，避免补 Key 重试时消息重复。
+                    if (
+                        not str(e).startswith("NEED_KEY:")
+                        and not is_current_first
+                        and rollback_start_id is not None
+                    ):
+                        rollback_start_id = None
+                    raise
 
                 full_response = "".join(chunks)
 
@@ -260,23 +268,33 @@ async def chat(req: ChatRequest):
             else:
                 code = "ollama_unreachable"
                 content = err
-            yield f"data: {json.dumps({'type': 'error', 'code': code, 'content': content})}\n\n"
+            yield f"data: {json.dumps({
+                'type': 'error',
+                'code': code,
+                'content': content,
+                'user_message_id': user_msg_id,
+            })}\n\n"
 
         except ValueError as e:
             logger.error(f"Config error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'code': 'config_error', 'content': str(e)})}\n\n"
+            yield f"data: {json.dumps({
+                'type': 'error',
+                'code': 'config_error',
+                'content': str(e),
+                'user_message_id': user_msg_id,
+            })}\n\n"
 
         except Exception as e:
             logger.error(f"Chat error: {e}")
             err_str = str(e)
             if "401" in err_str or "unauthorized" in err_str.lower() or "invalid_api_key" in err_str.lower():
-                yield f"data: {json.dumps({'type': 'error', 'code': 'auth_failed', 'content': 'API 认证失败，请检查 API Key 是否正确'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'code': 'auth_failed', 'content': 'API 认证失败，请检查 API Key 是否正确', 'user_message_id': user_msg_id})}\n\n"
             elif "429" in err_str or "rate_limit" in err_str.lower() or "too_many_requests" in err_str.lower():
-                yield f"data: {json.dumps({'type': 'error', 'code': 'rate_limited', 'content': '请求过于频繁，请稍后重试'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'code': 'rate_limited', 'content': '请求过于频繁，请稍后重试', 'user_message_id': user_msg_id})}\n\n"
             elif "insufficient_quota" in err_str.lower() or "exceeded" in err_str.lower():
-                yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'content': 'API 额度不足，请检查账户余额'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'code': 'quota_exceeded', 'content': 'API 额度不足，请检查账户余额', 'user_message_id': user_msg_id})}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'error', 'code': 'unknown', 'content': f'请求失败: {err_str}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'code': 'unknown', 'content': f'请求失败: {err_str}', 'user_message_id': user_msg_id})}\n\n"
 
         finally:
             if not completed and rollback_start_id is not None:

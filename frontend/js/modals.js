@@ -115,13 +115,6 @@ function populateModelSelect(selectId, selectedKey) {
   });
 }
 
-/** 填充参数滑块 */
-function populateParams(prefix) {
-  const gridId = prefix ? `params-grid-m2` : `params-grid`;
-  // params for model2 are populated with IDs like param2-temperature
-  if (prefix) return; // HTML 已内联所有滑块
-}
-
 function updateParamDisplays(suffix = "") {
   const ids = [
     "temperature", "top-p", "min-p", "top-k",

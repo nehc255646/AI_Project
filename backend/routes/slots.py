@@ -180,12 +180,19 @@ def update_slot_title(slot_index: int, req: dict):
 
 @router.patch("/api/slots/{slot_index}/api-key")
 def update_slot_api_key(slot_index: int, req: dict):
-    """更新存档的 API Key（用于 Ollama 连接失败后补填）。"""
-    resolve_slot(slot_index)
+    """更新存档的 API Key（用于 Ollama 连接失败后补填）。
+
+    双模型模式下同时更新模型2的 API Key，避免模型2重试仍缺 Key。
+    """
+    data = resolve_slot(slot_index)
     api_key = (req.get("api_key") or "").strip()
     if not api_key:
         error("empty_api_key", "API Key 不能为空", 400)
     get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
+    dual_config = data.get("dual_config", {}) or {}
+    if dual_config.get("enabled") and dual_config.get("model2"):
+        dual_config["model2"]["api_key"] = api_key
+        get_slot_mgr().update_dual_config(slot_index, dual_config)
     return {"ok": True}
 
 

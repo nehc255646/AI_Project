@@ -133,8 +133,6 @@ export async function sendMessage() {
   input.value = "";
   input.style.height = "auto";
 
-  const isDual = state.dualEnabled;
-
   // 添加用户消息气泡
   const userMsgBubble = addMessage("user", text, false);
   const userMsgDiv = userMsgBubble ? userMsgBubble.closest(".message") : null;
@@ -315,20 +313,44 @@ export async function sendMessage() {
 
             // ── 错误处理 ──
             case "error": {
-              bubbles.forEach(b => {
-                if (b.el) {
-                  const d = getMsgDiv(b.el);
+              // 已有完成的模型气泡（已收到 model_done）且非补 Key 场景：
+              // 后端会保留用户消息与已完成回复，前端仅移除失败模型的未完成气泡
+              const completedBubbles = bubbles.filter(b => b.msgId);
+              const hasCompleted = completedBubbles.length > 0 && code !== "ollama_need_key";
+
+              if (hasCompleted) {
+                bubbles.forEach(b => {
+                  if (!b.msgId) {
+                    const d = getMsgDiv(b.el);
+                    if (d) d.remove();
+                  }
+                });
+                bubbles = bubbles.filter(b => b.msgId);
+                if (currentBubble) {
+                  const d = getMsgDiv(currentBubble);
                   if (d) d.remove();
+                  currentBubble = null;
                 }
-              });
-              bubbles = [];
-              if (currentBubble) {
-                const d = getMsgDiv(currentBubble);
-                if (d) d.remove();
-                currentBubble = null;
+                // 保留的用户消息气泡回写消息 ID，保证后续编辑/删除可用
+                if (userMsgDiv && event.user_message_id) {
+                  userMsgDiv.dataset.messageId = event.user_message_id;
+                }
+              } else {
+                bubbles.forEach(b => {
+                  if (b.el) {
+                    const d = getMsgDiv(b.el);
+                    if (d) d.remove();
+                  }
+                });
+                bubbles = [];
+                if (currentBubble) {
+                  const d = getMsgDiv(currentBubble);
+                  if (d) d.remove();
+                  currentBubble = null;
+                }
+                // 本轮失败，后端会回滚数据库；移除用户消息气泡保持视觉一致
+                if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
               }
-              // 本轮失败，后端会回滚数据库；移除用户消息气泡保持视觉一致
-              if (userMsgDiv) { userMsgDiv.remove(); userMsgDiv = null; }
 
               if (code === "ollama_need_key") {
                 const container = document.getElementById("chat-messages");
@@ -367,7 +389,7 @@ export async function sendMessage() {
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
                   config_error: "⚙️ 模型配置错误",
                 };
-                addErrorMessage(msgs[code] || `⚠️ ${content || "未知错误"}`, text);
+                addErrorMessage(msgs[code] || `⚠️ ${content || "未知错误"}`, hasCompleted ? null : text);
               }
               break;
             }
