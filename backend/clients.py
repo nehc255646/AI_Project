@@ -48,6 +48,15 @@ class AIClient:
             self._ollama_client = httpx.AsyncClient(timeout=120)
         return self._ollama_client
 
+    async def close(self) -> None:
+        """释放 httpx 连接（服务关闭时调用）。"""
+        if self._ollama_client is not None:
+            try:
+                await self._ollama_client.aclose()
+            except Exception:
+                pass
+            self._ollama_client = None
+
     # ── Lazy client init ──
 
     def _client_deepseek(self) -> AsyncOpenAI:
@@ -171,58 +180,63 @@ class AIClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        # 带重试的 API 调用
+        # 带重试的 API 调用。
+        # 注意：仅"请求阶段"可重试；流一旦开始输出内容后若中断，
+        # 直接失败（重试会导致已输出内容与重新生成的内容重复拼接）。
         last_exception = None
+        started = False
         for attempt in range(_API_RETRY_MAX + 1):
             try:
                 stream = await client.chat.completions.create(**kwargs)
                 async for chunk in stream:
                     if chunk.choices and chunk.choices[0].delta.content:
+                        started = True
                         yield chunk.choices[0].delta.content
                 return  # 成功完成
-            except RateLimitError as e:
-                logger.warning(f"API 速率限制 (尝试 {attempt + 1}): {e}")
+            except (RateLimitError, APITimeoutError, APIError,
+                    httpx.TimeoutException, httpx.NetworkError) as e:
+                if started:
+                    logger.warning(f"流式响应已开始后中断（不重试，避免内容重复）: {e}")
+                    raise ConnectionError("回复生成中途中断，请重试") from e
                 last_exception = e
-                if attempt < _API_RETRY_MAX:
-                    await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
-                else:
-                    raise ConnectionError(f"API 请求频率过高，请稍后重试: {e}") from e
-            except APITimeoutError as e:
-                logger.warning(f"API 请求超时 (尝试 {attempt + 1}): {e}")
-                last_exception = e
-                if attempt < _API_RETRY_MAX:
-                    await asyncio.sleep(_API_RETRY_DELAY)
-                else:
-                    raise ConnectionError(f"API 请求超时，请检查网络连接: {e}") from e
-            except APIError as e:
-                logger.error(f"API 返回错误 (尝试 {attempt + 1}): {e}")
-                status = e.status_code
-                if status == 401:
-                    raise ValueError("API 认证失败，请检查 API Key 是否正确") from e
-                elif status == 403:
-                    raise ValueError("API 权限不足，请检查账户权限") from e
-                elif status == 429:
-                    raise ConnectionError("请求过于频繁，请稍后重试") from e
-                elif status >= 500:
+
+                # 速率限制
+                if isinstance(e, RateLimitError) or getattr(e, "status_code", None) == 429:
+                    logger.warning(f"API 速率限制 (尝试 {attempt + 1}): {e}")
                     if attempt < _API_RETRY_MAX:
                         await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                         continue
-                    raise ConnectionError(f"API 服务暂时不可用 ({status})") from e
-                raise  # 其他 API 错误直接抛出
-            except httpx.TimeoutException as e:
-                logger.warning(f"HTTP 请求超时 (尝试 {attempt + 1}): {e}")
-                last_exception = e
-                if attempt < _API_RETRY_MAX:
-                    await asyncio.sleep(_API_RETRY_DELAY)
-                else:
-                    raise ConnectionError(f"请求超时，请检查网络连接") from e
-            except httpx.NetworkError as e:
+                    raise ConnectionError("API 请求频率过高，请稍后重试") from e
+
+                # 超时
+                if isinstance(e, (APITimeoutError, httpx.TimeoutException)):
+                    logger.warning(f"API 请求超时 (尝试 {attempt + 1}): {e}")
+                    if attempt < _API_RETRY_MAX:
+                        await asyncio.sleep(_API_RETRY_DELAY)
+                        continue
+                    raise ConnectionError("API 请求超时，请检查网络连接") from e
+
+                # OpenAI 兼容 API 返回错误
+                if isinstance(e, APIError):
+                    status = e.status_code
+                    if status == 401:
+                        raise ValueError("API 认证失败，请检查 API Key 是否正确") from e
+                    if status == 403:
+                        raise ValueError("API 权限不足，请检查账户权限") from e
+                    if status >= 500:
+                        logger.error(f"API 服务错误 (尝试 {attempt + 1}): {e}")
+                        if attempt < _API_RETRY_MAX:
+                            await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
+                            continue
+                        raise ConnectionError(f"API 服务暂时不可用 ({status})") from e
+                    raise  # 其他 API 错误直接抛出
+
+                # httpx 网络错误
                 logger.warning(f"网络错误 (尝试 {attempt + 1}): {e}")
-                last_exception = e
                 if attempt < _API_RETRY_MAX:
                     await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
-                else:
-                    raise ConnectionError(f"网络连接失败，请检查网络: {e}") from e
+                    continue
+                raise ConnectionError(f"网络连接失败，请检查网络: {e}") from e
 
         # 所有重试耗尽
         raise ConnectionError(f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}")
@@ -269,16 +283,24 @@ class AIClient:
         headers = {}
         if url == OLLAMA_CLOUD_URL:
             headers["Authorization"] = f"Bearer {key}"
-        async with client.stream(
-            "POST", url, json=payload, headers=headers or None
-        ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if "message" in chunk and "content" in chunk["message"]:
-                        yield chunk["message"]["content"]
+        try:
+            async with client.stream(
+                "POST", url, json=payload, headers=headers or None
+            ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if "message" in chunk and "content" in chunk["message"]:
+                            yield chunk["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 401:
+                raise ValueError("Ollama 认证失败，请检查 API Key 是否正确") from e
+            raise ConnectionError(f"Ollama 服务返回错误 ({status})") from e
+        except (httpx.TransportError, httpx.HTTPError) as e:
+            raise ConnectionError(f"无法连接 Ollama 服务，请确认本地服务已启动或 Key 正确: {e}") from e

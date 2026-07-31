@@ -25,6 +25,22 @@ MODEL1_ICON = "🎭"
 MODEL2_ICON = "🌟"
 
 
+def _clean(items: list) -> list:
+    """只保留 role/content 字段，避免把数据库字段泄漏给模型。"""
+    return [
+        {"role": m.get("role"), "content": m.get("content")}
+        for m in items
+    ]
+
+
+def _auto_title(slot_index: int, system_prompt: str) -> str:
+    """从系统提示词自动生成存档标题，空提示词时退化为 存档N。"""
+    prompt_line = (system_prompt or "").strip().replace("\n", " ").strip()
+    if prompt_line:
+        return prompt_line[:20]
+    return f"存档{slot_index + 1}"
+
+
 @router.post("/api/chat")
 async def chat(req: ChatRequest):
     """SSE streaming chat — 接收 JSON，返回流式响应。"""
@@ -57,12 +73,6 @@ async def chat(req: ChatRequest):
     async def stream():
         completed = False
         rollback_start_id = None
-
-        def _clean(items: list) -> list:
-            return [
-                {"role": m.get("role"), "content": m.get("content")}
-                for m in items
-            ]
 
         try:
             user_msg_id = None
@@ -110,7 +120,7 @@ async def chat(req: ChatRequest):
 
                 if not data.get("title", ""):
                     get_slot_mgr().update_slot_meta(
-                        req.slot_index, {"title": f"存档{req.slot_index + 1}"}
+                        req.slot_index, {"title": _auto_title(req.slot_index, actual_prompt)}
                     )
 
                 done_event = {
@@ -244,7 +254,7 @@ async def chat(req: ChatRequest):
             # 自动标题
             if not data.get("title", ""):
                 get_slot_mgr().update_slot_meta(
-                    req.slot_index, {"title": f"存档{req.slot_index + 1}"}
+                    req.slot_index, {"title": _auto_title(req.slot_index, system_prompt)}
                 )
 
             # 最终 done 事件

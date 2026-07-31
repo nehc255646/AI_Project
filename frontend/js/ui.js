@@ -7,7 +7,7 @@
 
 import { state } from "./state.js";
 import { apiGet, apiPatch } from "./api.js";
-import { $, scrollToBottom } from "./utils.js";
+import { $, scrollToBottom, setStreamingFlag, escapeHtml } from "./utils.js";
 import { showToast } from "./toast.js";
 import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
 import { openCreateModal } from "./modals.js";
@@ -54,7 +54,9 @@ export function renderSlotGrid() {
   if (!grid) return;
   grid.innerHTML = "";
 
-  for (let i = 0; i < 10; i++) {
+  const total = state.slots.length || 10;
+
+  for (let i = 0; i < total; i++) {
     const info = state.slots[i];
     const card = document.createElement("div");
     card.className = "slot-card";
@@ -87,8 +89,8 @@ export function renderSlotGrid() {
       card.innerHTML = `
         <button class="slot-delete-btn" data-index="${i}" title="删除存档">✕</button>
         <div class="slot-card-content">
-          <div class="slot-title">${displayTitle.slice(0, 20)}</div>
-          <div class="slot-model-badge">${isDual ? "🎭🌟 双模型" : (info.model || "未知")}</div>
+          <div class="slot-title">${escapeHtml(displayTitle.slice(0, 20))}</div>
+          <div class="slot-model-badge">${isDual ? "🎭🌟 双模型" : escapeHtml(info.model || "未知")}</div>
           <div class="slot-time"><span class="slot-time-label">创建</span><span class="slot-time-value">${created || "未知"}</span></div>
           <div class="slot-time"><span class="slot-time-label">使用</span><span class="slot-time-value">${updated || "未知"}</span></div>
         </div>
@@ -248,18 +250,6 @@ export function addMessage(role, content, isStreaming = false, messageId = null,
   return bubble;  // 返回 .bubble 元素（流式写入用 textContent，完成用 innerHTML）
 }
 
-export function updateMessage(bubble, content) {
-  if (!bubble) return;
-  if (bubble.classList.contains("streaming")) {
-    bubble.textContent = content;
-  } else {
-    // 查找 contentDiv
-    const contentDiv = bubble.querySelector(".bubble-content") || bubble;
-    contentDiv.innerHTML = renderMarkdown(content);
-    enhanceCodeBlocks(contentDiv);
-  }
-}
-
 export function finishStreaming(bubble) {
   if (!bubble) return;
   // bubble 可能是 contentDiv，需要找到父级 .bubble
@@ -367,6 +357,7 @@ export function closeSidebar() {
 
 export function setStreaming(val) {
   state.streaming = val;
+  setStreamingFlag(val);
   const sendBtn = el("send-btn");
   const cancelBtn = el("cancel-stream-btn");
   const statusBadge = el("streaming-status-badge");
@@ -396,7 +387,7 @@ export function addErrorMessage(content, retryText = null) {
 
   const div = document.createElement("div");
   div.className = "message error";
-  div.innerHTML = `<div class="bubble">⚠️ ${content}</div>`;
+  div.innerHTML = `<div class="bubble">⚠️ ${escapeHtml(content)}</div>`;
   container.appendChild(div);
 
   if (retryText) {

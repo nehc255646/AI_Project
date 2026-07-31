@@ -6,6 +6,7 @@ Slot Manager — MySQL 存储实现。
 import datetime
 import json
 import logging
+from contextlib import contextmanager
 from typing import List, Dict, Optional
 
 import pymysql
@@ -58,6 +59,14 @@ class SlotManager:
         except pymysql.Error as e:
             logger.critical(f"数据库连接池初始化失败: {e}")
             raise RuntimeError(f"无法连接到 MySQL 数据库: {e}")
+
+    def close(self):
+        """关闭数据库连接池（服务关闭时调用）。"""
+        try:
+            if getattr(self, "pool", None) is not None:
+                self.pool.close()
+        except Exception as e:
+            logger.warning(f"关闭数据库连接池失败: {e}")
 
     # ── 数据库初始化 ──
 
@@ -142,306 +151,282 @@ class SlotManager:
         finally:
             conn.close()
 
-    # ── 核心 CRUD ──
+    # ── 通用事务模板 ──
 
-    def _with_conn(self, callback, *args, **kwargs):
-        """通用模板：获取连接 → 执行 → 提交 → 关闭。"""
+    @contextmanager
+    def _transaction(self):
+        """获取连接 → 执行 → 提交 → 关闭，异常时回滚并重抛。"""
         conn = _get_connection(self.pool)
         try:
-            result = callback(conn, *args, **kwargs)
+            yield conn
             conn.commit()
-            return result
-        except pymysql.Error as e:
+        except pymysql.Error:
             _safe_rollback(conn)
-            raise  # 由上层统一处理
+            raise
         finally:
             conn.close()
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.datetime.now().isoformat()
+
+    @staticmethod
+    def _json_or_default(raw, default):
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return default
+        return raw if raw is not None else default
+
+    # ── 核心 CRUD ──
 
     def create_slot(self, index: int, model: str, system_prompt: str,
                      api_key: str = "", params: Optional[dict] = None,
                      title: str = "", dual_config: Optional[dict] = None) -> bool:
         if index < 0 or index >= SLOT_COUNT:
             return False
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
-                if cursor.fetchone():
-                    return False
-                now = datetime.datetime.now().isoformat()
-                title = title.strip()
-                params_json = json.dumps(params) if params else "{}"
-                dual_json = json.dumps(dual_config) if dual_config else "{}"
-                cursor.execute(
-                    "INSERT INTO slots (id, model, system_prompt, api_key, title, params, dual_config, created_at, updated_at) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    (index, model, system_prompt, api_key, title, params_json, dual_json, now, now),
-                )
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                    if cursor.fetchone():
+                        return False
+                    now = self._now()
+                    title = title.strip()
+                    params_json = json.dumps(params) if params else "{}"
+                    dual_json = json.dumps(dual_config) if dual_config else "{}"
+                    cursor.execute(
+                        "INSERT INTO slots (id, model, system_prompt, api_key, title, params, dual_config, created_at, updated_at) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        (index, model, system_prompt, api_key, title, params_json, dual_json, now, now),
+                    )
             return True
         except pymysql.Error as e:
             logger.error(f"create_slot({index}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
 
     def get_slot(self, index: int) -> Optional[Dict]:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM slots WHERE id = %s", (index,))
-                slot = cursor.fetchone()
-                if not slot:
-                    return None
-                if isinstance(slot.get("params"), str):
-                    try:
-                        slot["params"] = json.loads(slot["params"])
-                    except (json.JSONDecodeError, TypeError):
-                        slot["params"] = {}
-                elif slot.get("params") is None:
-                    slot["params"] = {}
-                if isinstance(slot.get("dual_config"), str):
-                    try:
-                        slot["dual_config"] = json.loads(slot["dual_config"])
-                    except (json.JSONDecodeError, TypeError):
-                        slot["dual_config"] = {}
-                elif slot.get("dual_config") is None:
-                    slot["dual_config"] = {}
-                cursor.execute(
-                    "SELECT id, role, content, source FROM messages WHERE slot_id = %s ORDER BY id ASC",
-                    (index,),
-                )
-                slot["history"] = list(cursor.fetchall())
-                return slot
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT * FROM slots WHERE id = %s", (index,))
+                    slot = cursor.fetchone()
+                    if not slot:
+                        return None
+                    slot["params"] = self._json_or_default(slot.get("params"), {})
+                    slot["dual_config"] = self._json_or_default(slot.get("dual_config"), {})
+                    cursor.execute(
+                        "SELECT id, role, content, source FROM messages WHERE slot_id = %s ORDER BY id ASC",
+                        (index,),
+                    )
+                    slot["history"] = list(cursor.fetchall())
+                    return slot
         except pymysql.Error as e:
             logger.error(f"get_slot({index}) 失败: {e}")
             return None
-        finally:
-            conn.close()
 
     def delete_slot(self, index: int) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM slots WHERE id = %s", (index,))
-            conn.commit()
-            return cursor.rowcount > 0
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM slots WHERE id = %s", (index,))
+                    deleted = cursor.rowcount > 0
+            return deleted
         except pymysql.Error as e:
             logger.error(f"delete_slot({index}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
+
+    # 允许通过 update_slot_meta 更新的列（白名单，防止动态 SQL 注入）
+    _META_ALLOWED_COLUMNS = {"title", "api_key"}
 
     def update_slot_meta(self, index: int, meta: dict) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
-                if not cursor.fetchone():
-                    return False
-                set_parts = []
-                values = []
-                for key, val in meta.items():
-                    set_parts.append(f"{key} = %s")
-                    values.append(val)
-                set_parts.append("updated_at = %s")
-                values.append(datetime.datetime.now().isoformat())
-                values.append(index)
-                sql = f"UPDATE slots SET {', '.join(set_parts)} WHERE id = %s"
-                cursor.execute(sql, values)
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                    if not cursor.fetchone():
+                        return False
+                    set_parts = []
+                    values = []
+                    for key, val in meta.items():
+                        if key not in self._META_ALLOWED_COLUMNS:
+                            logger.warning(f"update_slot_meta({index}) 跳过非法列: {key}")
+                            continue
+                        set_parts.append(f"{key} = %s")
+                        values.append(val)
+                    if not set_parts:
+                        return False
+                    set_parts.append("updated_at = %s")
+                    values.append(self._now())
+                    values.append(index)
+                    sql = f"UPDATE slots SET {', '.join(set_parts)} WHERE id = %s"
+                    cursor.execute(sql, values)
             return True
         except pymysql.Error as e:
             logger.error(f"update_slot_meta({index}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
 
     def save_slot_history(self, index: int, history: List) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
-                if not cursor.fetchone():
-                    return False
-                cursor.execute("DELETE FROM messages WHERE slot_id = %s", (index,))
-                if history:
-                    cursor.executemany(
-                        "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
-                        [(index, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in history],
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                    if not cursor.fetchone():
+                        return False
+                    cursor.execute("DELETE FROM messages WHERE slot_id = %s", (index,))
+                    if history:
+                        cursor.executemany(
+                            "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
+                            [(index, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in history],
+                        )
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), index),
                     )
-                cursor.execute(
-                    "UPDATE slots SET updated_at = %s WHERE id = %s",
-                    (datetime.datetime.now().isoformat(), index),
-                )
-            conn.commit()
             return True
         except pymysql.Error as e:
             logger.error(f"save_slot_history({index}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
 
     # ── append-only 写入 ──
 
     def append_messages(self, slot_id: int, messages: List[Dict]) -> List[int]:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.executemany(
-                    "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
-                    [(slot_id, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in messages],
-                )
-                first_id = cursor.lastrowid
-                ids = list(range(first_id, first_id + len(messages)))
-                cursor.execute(
-                    "UPDATE slots SET updated_at = %s WHERE id = %s",
-                    (datetime.datetime.now().isoformat(), slot_id),
-                )
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO messages (slot_id, role, content, source) VALUES (%s, %s, %s, %s)",
+                        [(slot_id, m.get("role", ""), m.get("content", ""), m.get("source", "")) for m in messages],
+                    )
+                    first_id = cursor.lastrowid
+                    ids = list(range(first_id, first_id + len(messages)))
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), slot_id),
+                    )
             return ids
         except pymysql.Error as e:
             logger.error(f"append_messages({slot_id}) 失败: {e}")
-            _safe_rollback(conn)
             return []
-        finally:
-            conn.close()
 
     def delete_messages_from(self, slot_id: int, from_message_id: int) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "DELETE FROM messages WHERE slot_id = %s AND id >= %s",
-                    (slot_id, from_message_id),
-                )
-                cursor.execute(
-                    "UPDATE slots SET updated_at = %s WHERE id = %s",
-                    (datetime.datetime.now().isoformat(), slot_id),
-                )
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "DELETE FROM messages WHERE slot_id = %s AND id >= %s",
+                        (slot_id, from_message_id),
+                    )
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), slot_id),
+                    )
             return True
         except pymysql.Error as e:
             logger.error(f"delete_messages_from({slot_id}, {from_message_id}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
+
+    def delete_messages_by_ids(self, slot_id: int, message_ids: List[int]) -> bool:
+        """按消息 ID 精确删除（用于删除中间一段消息，不改变其余消息 ID）。"""
+        if not message_ids:
+            return True
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    placeholders = ", ".join(["%s"] * len(message_ids))
+                    cursor.execute(
+                        f"DELETE FROM messages WHERE slot_id = %s AND id IN ({placeholders})",
+                        (slot_id, *message_ids),
+                    )
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), slot_id),
+                    )
+            return True
+        except pymysql.Error as e:
+            logger.error(f"delete_messages_by_ids({slot_id}) 失败: {e}")
+            return False
 
     def clear_all_messages(self, slot_id: int) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM messages WHERE slot_id = %s", (slot_id,))
-                cursor.execute(
-                    "UPDATE slots SET updated_at = %s WHERE id = %s",
-                    (datetime.datetime.now().isoformat(), slot_id),
-                )
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM messages WHERE slot_id = %s", (slot_id,))
+                    cursor.execute(
+                        "UPDATE slots SET updated_at = %s WHERE id = %s",
+                        (self._now(), slot_id),
+                    )
             return True
         except pymysql.Error as e:
             logger.error(f"clear_all_messages({slot_id}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
 
     def update_message_content(self, message_id: int, content: str) -> bool:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE messages SET content = %s WHERE id = %s",
-                    (content, message_id),
-                )
-            conn.commit()
-            return cursor.rowcount > 0
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE messages SET content = %s WHERE id = %s",
+                        (content, message_id),
+                    )
+                    updated = cursor.rowcount > 0
+            return updated
         except pymysql.Error as e:
             logger.error(f"update_message_content({message_id}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()
 
     def list_slots(self) -> List[Optional[Dict]]:
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT s.*,
-                           (SELECT COUNT(*) FROM messages m WHERE m.slot_id = s.id) AS msg_count
-                    FROM slots s
-                    ORDER BY s.id ASC
-                """)
-                rows = cursor.fetchall()
-                row_map = {r["id"]: r for r in rows}
-                result = []
-                for i in range(SLOT_COUNT):
-                    slot = row_map.get(i)
-                    if slot is None:
-                        result.append(None)
-                    else:
-                        # 解析 params JSON
-                        params_raw = slot.get("params")
-                        if isinstance(params_raw, str):
-                            try:
-                                params_val = json.loads(params_raw)
-                            except (json.JSONDecodeError, TypeError):
-                                params_val = {}
-                        elif params_raw is None:
-                            params_val = {}
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT s.*,
+                               (SELECT COALESCE(SUM(role = 'user'), 0)
+                                FROM messages m WHERE m.slot_id = s.id) AS round_count
+                        FROM slots s
+                        ORDER BY s.id ASC
+                    """)
+                    rows = cursor.fetchall()
+                    row_map = {r["id"]: r for r in rows}
+                    result = []
+                    for i in range(SLOT_COUNT):
+                        slot = row_map.get(i)
+                        if slot is None:
+                            result.append(None)
                         else:
-                            params_val = params_raw
-                        # 解析 dual_config JSON
-                        dual_raw = slot.get("dual_config", "{}")
-                        dual_val = {}
-                        if isinstance(dual_raw, str):
-                            try:
-                                dual_val = json.loads(dual_raw)
-                            except (json.JSONDecodeError, TypeError):
-                                dual_val = {}
-                        elif isinstance(dual_raw, dict):
-                            dual_val = dual_raw
-                        result.append({
-                            "index": i,
-                            "model": slot.get("model", "未知"),
-                            "system_prompt": slot.get("system_prompt", ""),
-                            "created_at": slot.get("created_at", ""),
-                            "updated_at": slot.get("updated_at", ""),
-                            "message_count": slot.get("msg_count", 0) // 2,
-                            "title": slot.get("title", ""),
-                            "params": params_val,
-                            "dual_config": dual_val,
-                            "dual_enabled": dual_val.get("enabled", False),
-                        })
-                return result
+                            params_val = self._json_or_default(slot.get("params"), {})
+                            dual_val = self._json_or_default(slot.get("dual_config"), {})
+                            result.append({
+                                "index": i,
+                                "model": slot.get("model", "未知"),
+                                "system_prompt": slot.get("system_prompt", ""),
+                                "created_at": slot.get("created_at", ""),
+                                "updated_at": slot.get("updated_at", ""),
+                                "message_count": slot.get("round_count", 0),
+                                "title": slot.get("title", ""),
+                                "params": params_val,
+                                "dual_config": dual_val,
+                                "dual_enabled": dual_val.get("enabled", False),
+                            })
+                    return result
         except pymysql.Error as e:
             logger.error(f"list_slots 失败: {e}")
             return [None] * SLOT_COUNT
-        finally:
-            conn.close()
 
     def update_dual_config(self, index: int, dual_config: dict) -> bool:
         """更新 dual_config（如切换响应模式）。"""
-        conn = _get_connection(self.pool)
         try:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
-                if not cursor.fetchone():
-                    return False
-                cursor.execute(
-                    "UPDATE slots SET dual_config = %s, updated_at = %s WHERE id = %s",
-                    (json.dumps(dual_config), datetime.datetime.now().isoformat(), index),
-                )
-            conn.commit()
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                    if not cursor.fetchone():
+                        return False
+                    cursor.execute(
+                        "UPDATE slots SET dual_config = %s, updated_at = %s WHERE id = %s",
+                        (json.dumps(dual_config), self._now(), index),
+                    )
             return True
         except pymysql.Error as e:
             logger.error(f"update_dual_config({index}) 失败: {e}")
-            _safe_rollback(conn)
             return False
-        finally:
-            conn.close()

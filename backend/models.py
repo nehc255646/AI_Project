@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Request models ──
@@ -79,7 +78,7 @@ class SlotDetail(BaseModel):
     system_prompt: str
     created_at: str
     updated_at: str
-    history: list = []  # [{id, role, content, source}, ...]
+    history: list = Field(default_factory=list)  # [{id, role, content, source}, ...]
     title: str = ""
     params: Optional[dict] = None
     # 双模型信息
@@ -106,7 +105,3 @@ class ExportData(BaseModel):
     created_at: str
     updated_at: str
     messages: list
-
-
-def now_iso() -> str:
-    return datetime.datetime.now().isoformat()

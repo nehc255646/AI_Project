@@ -1,4 +1,5 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 
 :: 1. Check Python
@@ -32,8 +33,8 @@ if %errorlevel% equ 0 (
 echo [4/4] Starting server...
 cd /d "%~dp0backend"
 
-:: Launch python 
-start /b python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+:: 启动后端并记录 PID（退出时只结束自己启动的进程）
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "$p = Start-Process python -ArgumentList '-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden -PassThru; $p.Id"`) do set SERVER_PID=%%p
 
 start http://localhost:8000
 
@@ -42,4 +43,8 @@ echo   Server started!
 echo   Visit http://localhost:8000
 
 pause
+
+:: 只结束自己启动的后端进程（/t 连带终止 reload 子进程）
+if defined SERVER_PID taskkill /f /t /pid %SERVER_PID% >nul 2>&1
+endlocal
 

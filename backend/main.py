@@ -6,6 +6,7 @@ Entry point: sets up middleware, registers routers, serves static files.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -13,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import FRONTEND_DIR
+from config import FRONTEND_DIR, ALLOWED_ORIGINS
 from clients import AIClient
 from session_manager import SlotManager
 from state import init as init_state
@@ -32,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ai_client = None
+    slot_mgr = None
     try:
         ai_client = AIClient()
         slot_mgr = SlotManager()
@@ -44,12 +47,24 @@ async def lifespan(app: FastAPI):
         logger.critical(f"服务初始化时发生意外错误: {e}", exc_info=True)
         raise
     yield
+    # ── 关闭清理 ──
+    try:
+        if ai_client is not None:
+            await ai_client.close()
+    except Exception:
+        logger.warning("关闭 AIClient 时出错", exc_info=True)
+    try:
+        if slot_mgr is not None:
+            slot_mgr.close()
+    except Exception:
+        logger.warning("关闭数据库连接池时出错", exc_info=True)
+    logger.info("服务已关闭")
 
 
 app = FastAPI(title="AI 对话智能体 - 存档版", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,7 +98,7 @@ async def generic_exception_handler(request, exc: Exception):
         content={
             "code": "internal_error",
             "message": "服务器内部错误",
-            "detail": str(exc),
+            "detail": "",
         },
     )
 
@@ -106,4 +121,8 @@ else:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # 生产环境默认关闭 reload，需要时通过 UVICORN_RELOAD=1 开启
+    reload_enabled = os.environ.get("UVICORN_RELOAD", "").strip().lower() in (
+        "1", "true", "yes",
+    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=reload_enabled)

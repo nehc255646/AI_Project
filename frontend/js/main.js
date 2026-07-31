@@ -55,7 +55,7 @@ async function loadModels() {
     });
     updateApiKeyField();
   } catch (_) {
-    // Fallback
+    // Fallback：后端不可用时的兜底列表，需与 backend/config.py 的 MODEL_CONFIG 保持一致
     const fallback = [
       { key: "Minimax-M3", provider: "ollama" },
       { key: "Nemotron-3-Ultra", provider: "ollama" },
