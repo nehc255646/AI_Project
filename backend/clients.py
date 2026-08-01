@@ -177,8 +177,7 @@ class AIClient:
         if extra_body:
             kwargs["extra_body"] = extra_body
 
-        # 仅"请求阶段"可重试；流开始输出内容后若中断直接失败，
-        # 避免重试导致已输出内容与重新生成的内容重复拼接。
+        # 仅请求阶段可重试，流式输出开始后中断直接失败
         last_exception = None
         started = False
         for attempt in range(_API_RETRY_MAX + 1):

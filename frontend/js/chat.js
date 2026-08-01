@@ -128,7 +128,7 @@ export async function sendMessage() {
   if (!text || state.streaming) return;
   if (state.currentSlotIndex === null) return;
 
-  // 清理上一轮遗留的错误提示，避免错误气泡在聊天区越积越多
+  // 清理上一轮遗留的错误提示
   document.querySelectorAll("#chat-messages .message.error").forEach((el) => el.remove());
 
   input.value = "";
@@ -444,8 +444,8 @@ export async function sendMessage() {
       state.dualEnabled = state.currentSlotData.dual_enabled || false;
       state.responseMode = state.currentSlotData.response_mode || "both";
       state.firstModel = state.currentSlotData.first_model || "model1";
-      // 取消/超时中断时后端已回滚数据库，用最新数据重建 DOM 保持一致性
-      if (!gotDone && !errorHandled) {
+      // 取消/超时后本轮气泡已由 rollbackMessages 回滚，跳过用 DB 数据重建
+      if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
         renderMessages(state.currentSlotData.history || []);
       }
       updateSidebarInfo();
@@ -1055,7 +1055,7 @@ export async function setDualResponseMode(mode, firstModel) {
     });
     state.responseMode = resp.dual_config?.response_mode || mode;
     state.firstModel = resp.dual_config?.first_model || firstModel || "model1";
-    // 同步本地存档数据，避免后续读取到旧的 dual_config
+    // 同步本地存档数据
     if (state.currentSlotData) {
       state.currentSlotData.dual_config = resp.dual_config || state.currentSlotData.dual_config;
     }

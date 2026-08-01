@@ -295,8 +295,7 @@ class SlotManager:
         try:
             with self._transaction() as conn:
                 with conn.cursor() as cursor:
-                    # 逐条插入并记录每条真实 ID：executemany 在内容过长时会被拆成
-                    # 多条 INSERT，此时 lastrowid 只反映最后一条，无法推算出全部 ID。
+                    # 逐条插入并记录每条真实 ID
                     ids = []
                     for m in messages:
                         cursor.execute(

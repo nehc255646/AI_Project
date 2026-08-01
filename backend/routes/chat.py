@@ -199,8 +199,7 @@ async def _stream_dual_turn(
                     chunks.append(chunk)
                     yield _sse({'type': 'chunk', 'content': chunk, 'role': role})
             except Exception as e:
-                # 后续模型失败：保留已保存的用户消息与第一个模型回复；
-                # 但 NEED_KEY 需整体回滚，避免补 Key 重试时消息重复。
+                # 模型2失败：保留已保存的用户消息与模型1回复，NEED_KEY 需整体回滚
                 if (
                     not str(e).startswith("NEED_KEY:")
                     and not is_current_first

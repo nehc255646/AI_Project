@@ -26,5 +26,5 @@ def env_check():
 
 @router.get("/api/default-params")
 def default_params():
-    """返回默认生成参数，前端创建存档时使用，避免硬编码重复。"""
+    """返回默认生成参数，供前端创建存档时使用。"""
     return DEFAULT_PARAMS

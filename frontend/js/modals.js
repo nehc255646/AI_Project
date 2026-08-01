@@ -370,7 +370,7 @@ export function initModalListeners() {
         document.getElementById("step3-icon").textContent = "💬";
         document.getElementById("step3-title").textContent = "设置提示词";
       }
-      showStep(0); // 停留在步骤0，但更新UI
+      showStep(0);
     });
   });
 

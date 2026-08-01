@@ -23,7 +23,7 @@ export function escapeHtml(str) {
 export function scrollToBottom(smooth = true) {
   const el = document.getElementById("chat-messages");
   if (!el) return;
-  // 流式输出时用瞬时滚动，避免 smooth 动画堆积造成卡顿
+  // 流式输出时用瞬时滚动
   if (smooth && !streamingFlag) {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   } else {

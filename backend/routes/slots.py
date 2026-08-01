@@ -188,10 +188,9 @@ def update_slot_title(slot_index: int, req: dict):
 
 @router.patch("/api/slots/{slot_index}/api-key")
 def update_slot_api_key(slot_index: int, req: dict):
-    """更新存档的 API Key（用于 Ollama 连接失败后补填）。
+    """更新存档的 API Key（Ollama 连接失败后补填用）。
 
-    只把 Key 写给 provider 为 ollama 的模型，避免把 Ollama Cloud Key
-    误写到 DeepSeek/DashScope 模型上，导致重试时该模型认证失败。
+    仅写入 provider 为 ollama 的模型。
     """
     data = resolve_slot(slot_index)
     api_key = (req.get("api_key") or "").strip()

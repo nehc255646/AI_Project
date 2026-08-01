@@ -42,7 +42,6 @@ def check_api_key(provider: str, api_key: str) -> None:
     """校验 API Key 是否已配置（Ollama 除外，连接失败时再提示）。"""
     from config import DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, OLLAMA_API_KEY
 
-    # Ollama 创建时不要求 Key，连接失败时再说
     if provider == "ollama":
         return
 

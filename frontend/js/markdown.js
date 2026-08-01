@@ -20,7 +20,7 @@ import rust from "highlight.js/lib/languages/rust";
 import yaml from "highlight.js/lib/languages/yaml";
 import markdownLang from "highlight.js/lib/languages/markdown";
 
-// 按需注册常用语言（全量引入会让 vendor chunk 超过 1MB）
+// 按需注册常用语言
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("typescript", typescript);
 hljs.registerLanguage("python", python);

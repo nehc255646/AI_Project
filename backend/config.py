@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
-# 从项目根目录加载 .env（而非 backend/ 下）
+# 从项目根目录加载 .env
 load_dotenv(BASE_DIR.parent / ".env")
 
 # API 密钥

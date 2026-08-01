@@ -48,7 +48,7 @@ class DeleteMessageRequest(BaseModel):
 
     支持两种模式：
       - from_id：从该消息 ID 起全部删除（优先）
-      - from_index / to_index：按数组下标删除（兼容旧调用）
+      - from_index / to_index：按数组下标删除
     """
 
     from_index: Optional[int] = None
@@ -61,7 +61,7 @@ class EditMessageRequest(BaseModel):
 
     支持两种模式：
       - message_id：按消息 ID 定位（优先）
-      - index：按数组下标定位（兼容旧调用）
+      - index：按数组下标定位
     """
 
     index: Optional[int] = None
