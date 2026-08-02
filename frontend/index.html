@@ -51,12 +51,12 @@
         <section class="help-section help-section-highlight">
           <h3 class="help-section-title">📖 快速开始</h3>
           <ol class="help-list">
-            <li>在主页点击「<strong>+ 空存档</strong>」创建一个对话存档</li>
-            <li>选择一个 AI 模型（推荐 <strong>DeepSeek-v4-flash</strong>，需配置 API Key）</li>
-            <li>如果模型需要 API Key，填写密钥；如已在 <code>.env</code> 中设置则自动填充</li>
-            <li>可选：设置系统提示词来定制 AI 的角色和风格</li>
+            <li>在主页点击「<strong>+ 空存档</strong>」，选择「单模型」或「双模型 Role-Play」</li>
+            <li><strong>单模型：</strong>选择模型 → 调整参数 → 设置系统提示词与标题，即可开始对话</li>
+            <li><strong>双模型：</strong>分别配置两个模型（角色名、模型、参数、提示词），两个模型会依次回答，适合角色扮演</li>
+            <li>需要 API Key 的模型会提示填写；如已在 <code>.env</code> 中配置则自动识别</li>
             <li>在输入框输入消息，按 <kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</li>
-            <li>不想输入新消息时，点输入框旁的「<strong>⏩ 继续</strong>」让 AI 继续对话（双模型模式下两个模型都会正常回复）</li>
+            <li>不想输入新消息时，点输入框旁的「<strong>⏩ 继续</strong>」：单模型延续上一条回复，双模型则两个模型各回复一轮</li>
           </ol>
         </section>
 
@@ -69,19 +69,19 @@
             </div>
             <div class="help-model-item">
               <div class="help-model-name">DeepSeek-v4-Pro</div>
-              <div class="help-model-desc">同上需 API Key，性能更强但速度稍慢，适合复杂任务</div>
+              <div class="help-model-desc">同样需要 DeepSeek API Key，能力更强但速度稍慢，适合复杂任务</div>
             </div>
             <div class="help-model-item">
-              <div class="help-model-name">通义千问（Qwen3.6-Flash / 3.7-Max）</div>
+              <div class="help-model-name">通义千问（Qwen3.6-Flash / Qwen3.7-Max）</div>
               <div class="help-model-desc">阿里云开通 DashScope → 创建 API Key → 配置环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">Minimax-M3</div>
-              <div class="help-model-desc">通过 Ollama Cloud 调用，官方免费额度按周刷新。<br>前提：电脑上必须安装 <strong>Ollama</strong> 并保持后台运行（localhost:11434）</div>
+              <div class="help-model-desc">模型托管在 <strong>Ollama Cloud</strong> 云端服务。<br>本机已安装 Ollama 客户端并保持运行（localhost:11434）时免密钥调用；否则需提供 Ollama Cloud API Key</div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">Nemotron-3-Ultra</div>
-              <div class="help-model-desc">同上走 Ollama Cloud，需本地安装 Ollama 并开启服务</div>
+              <div class="help-model-desc">同样走 Ollama Cloud 云端服务，使用方式与 Minimax-M3 相同</div>
             </div>
           </div>
         </section>
@@ -90,11 +90,14 @@
           <h3 class="help-section-title">💡 操作技巧</h3>
           <ul class="help-list">
             <li><strong>10 个存档位：</strong>每个存档独立绑定模型和提示词，互不干扰，可同时开启多段对话</li>
-            <li><strong>重新生成：</strong>鼠标悬停在 AI 回复上，点击 ↻ 按钮可重新生成该条回复，最后一条回复的 ↻ 按钮常亮显示</li>
-            <li><strong>编辑消息：</strong>鼠标悬停在自己的消息上，点击 ✏️ 按钮可编辑内容，保存后自动重新发送</li>
-            <li><strong>取消回复：</strong>AI 回复时可随时点击顶栏的 ■ 按钮取消</li>
-            <li><strong>导出对话：</strong>在侧栏点击「导出对话」可将整段对话保存为 Markdown</li>
-            <li><strong>环境变量：</strong>在项目根目录 <code>.env</code> 文件中配置，格式为 <code>DEEPSEEK_API_KEY=sk-xxx</code> 或 <code>DASHSCOPE_API_KEY=sk-xxx</code>，配置后创建存档会自动读取</li>
+            <li><strong>双模型回复模式：</strong>在侧栏可切换「同时回复 / 仅模型1 / 仅模型2」，并调整谁先回复；模型2 会看到模型1 的回复</li>
+            <li><strong>重新生成：</strong>鼠标悬停在 AI 回复上，点击 ↻ 按钮重新生成该条回复，最后一条的 ↻ 按钮常亮显示</li>
+            <li><strong>编辑消息：</strong>鼠标悬停在自己的消息上，点击 ✏️ 按钮编辑内容，保存后自动重新发送</li>
+            <li><strong>取消回复：</strong>AI 回复时可点击顶栏的 ■ 按钮取消，已发的消息会回滚并恢复到输入框</li>
+            <li><strong>编辑标题：</strong>在侧栏点击标题或 ✏️ 按钮即可重命名存档</li>
+            <li><strong>Ollama 连接失败：</strong>会自动弹出输入框补填 Ollama Cloud API Key，保存后自动重试</li>
+            <li><strong>导出对话：</strong>在侧栏点击「导出对话」可将整段对话导出为 Markdown</li>
+            <li><strong>环境变量：</strong>在项目根目录 <code>.env</code> 文件中配置，格式为 <code>DEEPSEEK_API_KEY=sk-xxx</code> 或 <code>DASHSCOPE_API_KEY=sk-xxx</code></li>
           </ul>
         </section>
 
