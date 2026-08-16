@@ -22,6 +22,13 @@ _API_RETRY_DELAY = 1.0  # 初始延迟（秒），指数退避
 
 # 支持把 min_p / top_k 放进 extra_body 的提供商（其他提供商忽略，避免 400）
 _EXTRA_BODY_PROVIDERS = {"deepseek", "dashscope"}
+_OLLAMA_EXTRA_BODY_PROVIDERS = {"ollama_cloud", "ollama_local"}
+
+
+class AIClientError(Exception):
+    def __init__(self, message: str, error_code: str):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _is_deepseek_model(model_key: str, model_id: str) -> bool:
@@ -87,7 +94,8 @@ class AIClient:
             max_tokens = cfg.get("max_tokens")
         # 用户参数中的 num_predict 优先于模型配置的 max_tokens
         if params and params.get("num_predict") is not None:
-            max_tokens = params["num_predict"]
+            requested_tokens = params["num_predict"]
+            max_tokens = min(requested_tokens, cfg.get("max_tokens", requested_tokens))
 
         kwargs = dict(model=model_id, messages=messages, stream=True)
 
@@ -125,6 +133,10 @@ class AIClient:
             for k in ("min_p", "top_k"):
                 if k in params:
                     extra_body[k] = params[k]
+        if provider in _OLLAMA_EXTRA_BODY_PROVIDERS and params:
+            for k in ("min_p", "top_k", "num_ctx", "repeat_penalty"):
+                if k in params:
+                    extra_body[k] = params[k]
         if extra_body:
             kwargs.setdefault("extra_body", {}).update(extra_body)
 
@@ -143,7 +155,7 @@ class AIClient:
                     httpx.TimeoutException, httpx.NetworkError) as e:
                 if started:
                     logger.warning(f"流式响应已开始后中断（不重试，避免内容重复）: {e}")
-                    raise ConnectionError("回复生成中途中断，请重试") from e
+                    raise AIClientError("回复生成中途中断，请重试", "stream_interrupted") from e
                 last_exception = e
 
                 # 速率限制
@@ -152,7 +164,7 @@ class AIClient:
                     if attempt < _API_RETRY_MAX:
                         await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                         continue
-                    raise ConnectionError("API 请求频率过高，请稍后重试") from e
+                    raise AIClientError("API 请求频率过高，请稍后重试", "rate_limited") from e
 
                 # 超时
                 if isinstance(e, (APITimeoutError, httpx.TimeoutException)):
@@ -160,21 +172,21 @@ class AIClient:
                     if attempt < _API_RETRY_MAX:
                         await asyncio.sleep(_API_RETRY_DELAY)
                         continue
-                    raise ConnectionError("API 请求超时，请检查网络连接") from e
+                    raise AIClientError("API 请求超时，请检查网络连接", "timeout") from e
 
                 # OpenAI 兼容 API 返回错误
                 if isinstance(e, APIError):
                     status = e.status_code
                     if status == 401:
-                        raise ValueError("API 认证失败，请检查 API Key 是否正确") from e
+                        raise AIClientError("API 认证失败，请检查 API Key 是否正确", "auth_failed") from e
                     if status == 403:
-                        raise ValueError("API 权限不足，请检查账户权限") from e
+                        raise AIClientError("API 权限不足，请检查账户权限", "permission_denied") from e
                     if status >= 500:
                         logger.error(f"API 服务错误 (尝试 {attempt + 1}): {e}")
                         if attempt < _API_RETRY_MAX:
                             await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                             continue
-                        raise ConnectionError(f"API 服务暂时不可用 ({status})") from e
+                        raise AIClientError(f"API 服务暂时不可用 ({status})", "service_unavailable") from e
                     raise  # 其他 API 错误直接抛出
 
                 # httpx 网络错误
@@ -182,7 +194,10 @@ class AIClient:
                 if attempt < _API_RETRY_MAX:
                     await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                     continue
-                raise ConnectionError(f"网络连接失败，请检查网络: {e}") from e
+                raise AIClientError(f"网络连接失败，请检查网络: {e}", "network_error") from e
 
         # 所有重试耗尽
-        raise ConnectionError(f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}")
+        raise AIClientError(
+            f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}",
+            "request_failed",
+        )

@@ -256,6 +256,7 @@ export async function sendMessage() {
                 }
                 const contentDiv = getContent(entry.el);
                 if (contentDiv) {
+                  entry.el.dataset.rawContent = entry.fullContent;
                   contentDiv.innerHTML = renderMarkdown(entry.fullContent);
                   enhanceCodeBlocks(contentDiv);
                 }
@@ -293,6 +294,7 @@ export async function sendMessage() {
                   // 完成渲染
                   const contentDiv = getContent(entry.el);
                   if (contentDiv) {
+                    entry.el.dataset.rawContent = entry.fullContent;
                     contentDiv.innerHTML = renderMarkdown(entry.fullContent);
                     enhanceCodeBlocks(contentDiv);
                   }
@@ -322,7 +324,8 @@ export async function sendMessage() {
               // 已有完成的模型气泡（已收到 model_done）且非补 Key 场景：
               // 后端会保留用户消息与已完成回复，前端仅移除失败模型的未完成气泡
               const completedBubbles = bubbles.filter(b => b.msgId);
-              const hasCompleted = completedBubbles.length > 0 && code !== "ollama_need_key";
+              const hasCompleted = completedBubbles.length > 0 &&
+                code !== "ollama_need_key" && code !== "database_error";
 
               if (hasCompleted) {
                 bubbles.forEach(b => {
@@ -394,6 +397,12 @@ export async function sendMessage() {
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
                   config_error: "⚙️ 模型配置错误",
+                  database_error: "💾 存档写入失败，请稍后重试",
+                  network_error: "🔌 网络连接失败，请检查网络连接",
+                  timeout: "⏱️ 请求超时，请稍后重试",
+                  service_unavailable: "🛠️ 模型服务暂时不可用",
+                  permission_denied: "⛔ API 权限不足",
+                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
                 };
                 addErrorMessage(msgs[code] || `⚠️ ${content || "未知错误"}`, hasCompleted ? null : text);
               }
@@ -516,7 +525,7 @@ export async function continueLastReply() {
     return;
   }
 
-  const originalText = contentDiv.textContent || "";
+  const originalText = bubble.dataset.rawContent ?? contentDiv.textContent ?? "";
   let fullContent = originalText;
   let gotDone = false;
   let errorHandled = false;
@@ -585,6 +594,7 @@ export async function continueLastReply() {
             }
             case "done": {
               gotDone = true;
+              bubble.dataset.rawContent = fullContent;
               contentDiv.innerHTML = renderMarkdown(fullContent);
               enhanceCodeBlocks(contentDiv);
               break;
@@ -592,7 +602,8 @@ export async function continueLastReply() {
             case "error": {
               errorHandled = true;
               // 后端尚未落库，恢复原内容并提示
-              contentDiv.textContent = originalText;
+              contentDiv.innerHTML = renderMarkdown(originalText);
+              enhanceCodeBlocks(contentDiv);
               if (event.code === "ollama_need_key") {
                 showOllamaKeyCard(event.content, () => continueLastReply(), event.key_target || "model1");
               } else {
@@ -602,6 +613,12 @@ export async function continueLastReply() {
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
                   config_error: "⚙️ 模型配置错误",
+                  database_error: "💾 存档写入失败，请稍后重试",
+                  network_error: "🔌 网络连接失败，请检查网络连接",
+                  timeout: "⏱️ 请求超时，请稍后重试",
+                  service_unavailable: "🛠️ 模型服务暂时不可用",
+                  permission_denied: "⛔ API 权限不足",
+                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
                 };
                 addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
               }
@@ -617,15 +634,18 @@ export async function continueLastReply() {
       aborted = true;
     } else {
       errorHandled = true;
-      contentDiv.textContent = originalText;
+      contentDiv.innerHTML = renderMarkdown(originalText);
+      enhanceCodeBlocks(contentDiv);
       addErrorMessage(`请求失败: ${e.message}`);
     }
   } finally {
     if (state.streamCancelled) {
-      contentDiv.textContent = originalText;
+      contentDiv.innerHTML = renderMarkdown(originalText);
+      enhanceCodeBlocks(contentDiv);
       showToast("已取消", "info");
     } else if (aborted) {
-      contentDiv.textContent = originalText;
+      contentDiv.innerHTML = renderMarkdown(originalText);
+      enhanceCodeBlocks(contentDiv);
     }
     finishStreaming(bubble);
   }
@@ -756,6 +776,7 @@ async function continueDualTurn() {
                 }
                 const contentDiv = getContent(entry.el);
                 if (contentDiv) {
+                  entry.el.dataset.rawContent = entry.fullContent;
                   contentDiv.innerHTML = renderMarkdown(entry.fullContent);
                   enhanceCodeBlocks(contentDiv);
                 }
@@ -804,6 +825,12 @@ async function continueDualTurn() {
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
                   config_error: "⚙️ 模型配置错误",
+                  database_error: "💾 存档写入失败，请稍后重试",
+                  network_error: "🔌 网络连接失败，请检查网络连接",
+                  timeout: "⏱️ 请求超时，请稍后重试",
+                  service_unavailable: "🛠️ 模型服务暂时不可用",
+                  permission_denied: "⛔ API 权限不足",
+                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
                 };
                 addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
               }

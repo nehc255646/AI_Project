@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,35 +12,58 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     slot_index: int
-    message: str = ""
+    message: str = Field(default="", max_length=200_000)
+
+
+class GenerationParams(BaseModel):
+    thinking_enabled: bool = True
+    temperature: float = Field(default=1.1, ge=0, le=2)
+    min_p: float = Field(default=0.1, ge=0, le=1)
+    top_k: int = Field(default=100, ge=0, le=1000)
+    top_p: float = Field(default=0.95, ge=0, le=1)
+    repeat_penalty: float = Field(default=1.25, ge=0, le=3)
+    presence_penalty: float = Field(default=0.4, ge=-2, le=2)
+    frequency_penalty: float = Field(default=0.0, ge=-2, le=2)
+    num_ctx: int = Field(default=131072, ge=1, le=262144)
+    num_predict: int = Field(default=4096, ge=1, le=16384)
 
 
 class DualModelConfig(BaseModel):
     """双模型配置 — 第二模型的所有信息。"""
-    model: str = "DeepSeek-v4-flash"
-    system_prompt: str = "使用中文回答"
-    api_key: str = ""
-    params: Optional[dict] = None
+    model: str = "deepseek:deepseek-v4-flash"
+    system_prompt: str = Field(default="使用中文回答", max_length=100_000)
+    api_key: str = Field(default="", max_length=256)
+    params: Optional[GenerationParams] = None
+
+
+class DualConfig(BaseModel):
+    enabled: bool = False
+    response_mode: Literal["model1", "model2", "both"] = "both"
+    first_model: Literal["model1", "model2"] = "model1"
+    pass_mode: Literal["user", "assistant"] = "user"
+    model1_name: str = Field(default="", max_length=20)
+    model2_name: str = Field(default="", max_length=20)
+    model2: Optional[DualModelConfig] = None
 
 
 class CreateSlotRequest(BaseModel):
-    model: str = "DeepSeek-v4-flash"
-    system_prompt: str = "使用中文回答"
-    api_key: str = ""
-    title: str = ""  # 自定义标题，为空则后端自动生成
-    params: Optional[dict] = None  # 生成参数，为空则使用后端默认值
+    model: str = "deepseek:deepseek-v4-flash"
+    system_prompt: str = Field(default="使用中文回答", max_length=100_000)
+    api_key: str = Field(default="", max_length=256)
+    title: str = Field(default="", max_length=128)
+    params: Optional[GenerationParams] = None
     # 双模型字段
     dual_enabled: bool = False
-    model1_name: str = ""
-    model2_name: str = ""
+    model1_name: str = Field(default="", max_length=20)
+    model2_name: str = Field(default="", max_length=20)
     model2: Optional[DualModelConfig] = None
-    pass_mode: str = "user"  # "user" | "assistant" — 另一模型消息以什么角色传入
+    pass_mode: Literal["user", "assistant"] = "user"
 
 
 class DualToggleRequest(BaseModel):
     """切换双模型的回复模式。"""
-    response_mode: str = "both"  # "model1" | "model2" | "both"
-    first_model: str = "model1"  # "model1" | "model2" 谁先回复
+    response_mode: Literal["model1", "model2", "both"] = "both"
+    first_model: Literal["model1", "model2"] = "model1"
 
 
 class DeleteMessageRequest(BaseModel):
@@ -66,7 +89,7 @@ class EditMessageRequest(BaseModel):
 
     index: Optional[int] = None
     message_id: Optional[int] = None  # 按消息 ID 定位（优先）
-    content: str
+    content: str = Field(max_length=200_000)
 
 
 # ── 响应模型 ──
@@ -110,9 +133,15 @@ class ExportData(BaseModel):
 class ImportSlotRequest(BaseModel):
     """完整存档备份导入数据。"""
     model: str
-    system_prompt: str = "使用中文回答"
-    api_key: str = ""
-    title: str = ""
-    params: Optional[dict] = None
-    dual_config: Optional[dict] = None
-    messages: list = Field(default_factory=list)
+    system_prompt: str = Field(default="使用中文回答", max_length=100_000)
+    api_key: str = Field(default="", max_length=256)
+    title: str = Field(default="", max_length=128)
+    params: Optional[GenerationParams] = None
+    dual_config: Optional[DualConfig] = None
+    messages: list["ImportMessage"] = Field(default_factory=list, max_length=10_000)
+
+
+class ImportMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(default="", max_length=200_000)
+    source: Literal["", "single", "model1", "model2"] = ""

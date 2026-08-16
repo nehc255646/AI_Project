@@ -213,6 +213,7 @@ export function addMessage(role, content, isStreaming = false, messageId = null,
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
+  bubble.dataset.rawContent = content ?? "";
   if (isStreaming) bubble.classList.add("streaming");
 
   // 标签栏（双模型时显示角色名）

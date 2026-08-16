@@ -68,6 +68,34 @@ class SlotManager:
         except Exception as e:
             logger.warning(f"关闭数据库连接池失败: {e}")
 
+    def acquire_slot_lock(self, index: int):
+        conn = pymysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database=MYSQL_DATABASE,
+            charset=MYSQL_CHARSET,
+        )
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT GET_LOCK(%s, 0)", (f"ai_chat_slot_{index}",))
+                acquired = cursor.fetchone()[0]
+            if not acquired:
+                conn.close()
+                return None
+            return conn
+        except Exception:
+            conn.close()
+            raise
+
+    def release_slot_lock(self, conn, index: int):
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT RELEASE_LOCK(%s)", (f"ai_chat_slot_{index}",))
+        finally:
+            conn.close()
+
     # ── 数据库初始化 ──
 
     def _ensure_database(self):

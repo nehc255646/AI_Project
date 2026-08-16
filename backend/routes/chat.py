@@ -30,10 +30,27 @@ def _slot_lock(slot_index: int) -> asyncio.Lock:
     return _slot_locks[slot_index]
 
 
+async def _db_call(method, *args):
+    return await asyncio.to_thread(method, *args)
+
+
 async def _locked_stream(slot_index: int, source):
     async with _slot_lock(slot_index):
-        async for event in source:
-            yield event
+        lock_conn = None
+        try:
+            lock_conn = await _db_call(get_slot_mgr().acquire_slot_lock, slot_index)
+            if lock_conn is None:
+                yield _sse({
+                    "type": "error",
+                    "code": "slot_busy",
+                    "content": "该存档正在生成回复，请稍后重试",
+                })
+                return
+            async for event in source:
+                yield event
+        finally:
+            if lock_conn is not None:
+                await _db_call(get_slot_mgr().release_slot_lock, lock_conn, slot_index)
 
 # ── 固定图标 ──
 MODEL1_ICON = "🎭"
@@ -53,14 +70,21 @@ def _sse(data: dict) -> str:
 
 def _exception_error_event(e: Exception, ref_key: str, ref_value) -> dict:
     """把异常映射为统一的 SSE error 事件（供 /api/chat 与 continue 复用）。"""
+    error_code = getattr(e, "error_code", None)
+    if error_code:
+        return {
+            "type": "error",
+            "code": error_code,
+            "content": str(e),
+            ref_key: ref_value,
+        }
     if isinstance(e, ConnectionError):
         err = str(e)
-        if err.startswith("NEED_KEY:"):
-            return {'type': 'error', 'code': 'ollama_need_key',
-                    'content': err[len("NEED_KEY:"):].strip(), ref_key: ref_value}
-        return {'type': 'error', 'code': 'ollama_unreachable', 'content': err, ref_key: ref_value}
+        return {"type": "error", "code": "network_error", "content": err, ref_key: ref_value}
     if isinstance(e, ValueError):
         return {'type': 'error', 'code': 'config_error', 'content': str(e), ref_key: ref_value}
+    if isinstance(e, RuntimeError) and str(e).startswith("数据库"):
+        return {'type': 'error', 'code': 'database_error', 'content': '存档写入失败，请稍后重试', ref_key: ref_value}
     err_str = str(e)
     low = err_str.lower()
     if "401" in err_str or "unauthorized" in low or "invalid_api_key" in low:
@@ -107,7 +131,7 @@ async def _stream_dual_turn(
     回滚起点 = 本轮第一条已保存的 assistant 消息。
     """
     dual_config = data.get("dual_config", {}) or {}
-    model = data.get("model", "DeepSeek-v4-flash")
+    model = data.get("model", "deepseek:deepseek-v4-flash")
     system_prompt = data.get("system_prompt", "使用中文回答")
     api_key = data.get("api_key", "")
     params = data.get("params", {}) or {}
@@ -128,9 +152,11 @@ async def _stream_dual_turn(
     try:
         # 用户消息：仅普通发消息时落库并作为回滚起点
         if persist_user:
-            saved_ids = get_slot_mgr().append_messages(slot_index, [
+            saved_ids = await _db_call(get_slot_mgr().append_messages, slot_index, [
                 {"role": "user", "content": user_content},
             ])
+            if not saved_ids:
+                raise RuntimeError("数据库写入用户消息失败")
             user_msg_id = saved_ids[0] if saved_ids else None
             if saved_ids:
                 rollback_start_id = saved_ids[0]
@@ -215,10 +241,9 @@ async def _stream_dual_turn(
                     chunks.append(chunk)
                     yield _sse({'type': 'chunk', 'content': chunk, 'role': role})
             except Exception as e:
-                # 模型2失败：保留已保存的用户消息与模型1回复，NEED_KEY 需整体回滚
+                # 模型2调用失败时保留已完成的模型1回复。
                 if (
-                    not str(e).startswith("NEED_KEY:")
-                    and not is_current_first
+                    not is_current_first
                     and rollback_start_id is not None
                 ):
                     rollback_start_id = None
@@ -227,9 +252,11 @@ async def _stream_dual_turn(
             full_response = "".join(chunks)
 
             # 保存到数据库
-            saved = get_slot_mgr().append_messages(slot_index, [
+            saved = await _db_call(get_slot_mgr().append_messages, slot_index, [
                 {"role": "assistant", "content": full_response, "source": role},
             ])
+            if not saved:
+                raise RuntimeError("数据库写入模型回复失败")
             msg_ids.extend(saved)
             # 继续回复模式：回滚起点设为本轮第一条 assistant 消息
             if rollback_start_id is None and saved:
@@ -253,9 +280,11 @@ async def _stream_dual_turn(
 
         # 自动标题
         if not data.get("title", ""):
-            get_slot_mgr().update_slot_meta(
+            if not await _db_call(
+                get_slot_mgr().update_slot_meta,
                 slot_index, {"title": _auto_title(slot_index, system_prompt)}
-            )
+            ):
+                logger.warning(f"自动更新存档 #{slot_index + 1} 标题失败")
 
         # 最终 done 事件
         completed = True
@@ -283,7 +312,11 @@ async def _stream_dual_turn(
     finally:
         if not completed and rollback_start_id is not None:
             try:
-                get_slot_mgr().delete_messages_from(slot_index, rollback_start_id)
+                await _db_call(
+                    get_slot_mgr().delete_messages_from,
+                    slot_index,
+                    rollback_start_id,
+                )
                 logger.info(
                     f"流中断，已回滚存档 #{slot_index + 1} 的消息（起点 #{rollback_start_id}）"
                 )
@@ -294,11 +327,11 @@ async def _stream_dual_turn(
 @router.post("/api/chat")
 async def chat(req: ChatRequest):
     """流式对话 — 接收 JSON，返回 SSE 流式响应。"""
-    data = resolve_slot(req.slot_index)
+    data = await _db_call(resolve_slot, req.slot_index)
 
     history: list = data.get("history", [])
     system_prompt: str = data.get("system_prompt", "使用中文回答")
-    model: str = data.get("model", "DeepSeek-v4-flash")
+    model: str = data.get("model", "deepseek:deepseek-v4-flash")
     api_key: str = data.get("api_key", "")
     params: dict = data.get("params", {}) or {}
     dual_config: dict = data.get("dual_config", {}) or {}
@@ -353,9 +386,11 @@ async def chat(req: ChatRequest):
 
                 chunks = []
                 # 先保存用户消息，拿到 ID
-                saved_ids = get_slot_mgr().append_messages(req.slot_index, [
+                saved_ids = await _db_call(get_slot_mgr().append_messages, req.slot_index, [
                     {"role": "user", "content": user_content},
                 ])
+                if not saved_ids:
+                    raise RuntimeError("数据库写入用户消息失败")
                 user_msg_id = saved_ids[0] if saved_ids else None
                 if rollback_start_id is None and saved_ids:
                     rollback_start_id = saved_ids[0]
@@ -368,15 +403,19 @@ async def chat(req: ChatRequest):
                     yield _sse({'type': 'chunk', 'content': chunk})
 
                 full_response = "".join(chunks)
-                msg_ids = get_slot_mgr().append_messages(req.slot_index, [
+                msg_ids = await _db_call(get_slot_mgr().append_messages, req.slot_index, [
                     {"role": "assistant", "content": full_response, "source": "single"},
                 ])
+                if not msg_ids:
+                    raise RuntimeError("数据库写入模型回复失败")
                 history.append({"role": "assistant", "content": full_response})
 
                 if not data.get("title", ""):
-                    get_slot_mgr().update_slot_meta(
+                    if not await _db_call(
+                        get_slot_mgr().update_slot_meta,
                         req.slot_index, {"title": _auto_title(req.slot_index, actual_prompt)}
-                    )
+                    ):
+                        logger.warning(f"自动更新存档 #{req.slot_index + 1} 标题失败")
 
                 done_event = {
                     'type': 'done',
@@ -403,7 +442,7 @@ async def chat(req: ChatRequest):
             raise
 
         except ConnectionError as e:
-            logger.error(f"Ollama connection error: {e}")
+            logger.error(f"AI 服务连接错误: {e}")
             yield _sse(_exception_error_event(e, "user_message_id", user_msg_id))
 
         except ValueError as e:
@@ -417,7 +456,11 @@ async def chat(req: ChatRequest):
         finally:
             if not completed and rollback_start_id is not None:
                 try:
-                    get_slot_mgr().delete_messages_from(req.slot_index, rollback_start_id)
+                    await _db_call(
+                        get_slot_mgr().delete_messages_from,
+                        req.slot_index,
+                        rollback_start_id,
+                    )
                     logger.info(
                         f"流中断，已回滚存档 #{req.slot_index + 1} 的消息（起点 #{rollback_start_id}）"
                     )
@@ -443,9 +486,15 @@ async def continue_chat(slot_index: int):
     双模型：相当于用户留空，两个模型按 response_mode / first_model / pass_mode
     正常回复一轮（各新增一条回复，不落库用户消息）。
     """
-    data = resolve_slot(slot_index)
+    data = await _db_call(resolve_slot, slot_index)
     history: list = data.get("history", [])
     dual_config = data.get("dual_config", {}) or {}
+
+    if dual_config.get("enabled", False):
+        if dual_config.get("response_mode", "both") not in ("model1", "model2", "both"):
+            error("invalid_response_mode", "回复模式无效", 400)
+        if dual_config.get("first_model", "model1") not in ("model1", "model2"):
+            error("invalid_first_model", "先回复模型无效", 400)
 
     # ── 双模型：跳过用户消息，两个模型正常回复一轮 ──
     if dual_config.get("enabled", False):
@@ -521,10 +570,14 @@ async def continue_chat(slot_index: int):
             full_response = "".join(chunks)
             # 生成完成后合并回最后一条 assistant 消息
             if full_response and message_id:
-                get_slot_mgr().update_message_content(
+                updated = await _db_call(
+                    get_slot_mgr().update_message_content,
                     slot_index, message_id, original_content + full_response
                 )
-                get_slot_mgr().touch_slot(slot_index)
+                if not updated:
+                    raise RuntimeError("数据库更新模型回复失败")
+                if not await _db_call(get_slot_mgr().touch_slot, slot_index):
+                    logger.warning(f"刷新存档 #{slot_index + 1} 时间失败")
 
             yield _sse({
                 'type': 'done',
