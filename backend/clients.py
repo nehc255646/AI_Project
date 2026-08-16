@@ -24,6 +24,11 @@ _API_RETRY_DELAY = 1.0  # 初始延迟（秒），指数退避
 _EXTRA_BODY_PROVIDERS = {"deepseek", "dashscope"}
 
 
+def _is_deepseek_model(model_key: str, model_id: str) -> bool:
+    """模型清单固定维护；模型名含 deepseek 的条目统一视为可选思考模型。"""
+    return "deepseek" in model_id.lower() or "deepseek" in model_key.lower()
+
+
 class AIClient:
     def __init__(self):
         # 按 (base_url, api_key) 缓存客户端
@@ -96,7 +101,7 @@ class AIClient:
             kwargs["max_tokens"] = max_tokens
 
         # DeepSeek 支持按存档选择思考模式，其他模型统一禁用思考
-        if "deepseek" in model_id.lower() or "deepseek" in model_key.lower():
+        if _is_deepseek_model(model_key, model_id):
             thinking_enabled = (params or {}).get("thinking_enabled", True)
             if provider == "dashscope":
                 kwargs.setdefault("extra_body", {}).update({"enable_thinking": thinking_enabled})

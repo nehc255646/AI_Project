@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import asyncio
 from typing import AsyncGenerator
 
 from fastapi import APIRouter
@@ -20,6 +21,19 @@ from state import get_ai_client, get_slot_mgr
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+_slot_locks: dict[int, asyncio.Lock] = {}
+
+
+def _slot_lock(slot_index: int) -> asyncio.Lock:
+    if slot_index not in _slot_locks:
+        _slot_locks[slot_index] = asyncio.Lock()
+    return _slot_locks[slot_index]
+
+
+async def _locked_stream(slot_index: int, source):
+    async with _slot_lock(slot_index):
+        async for event in source:
+            yield event
 
 # ── 固定图标 ──
 MODEL1_ICON = "🎭"
@@ -411,7 +425,7 @@ async def chat(req: ChatRequest):
                     logger.warning(f"回滚失败: {e}")
 
     return StreamingResponse(
-        stream(),
+        _locked_stream(req.slot_index, stream()),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -447,7 +461,7 @@ async def continue_chat(slot_index: int):
                 await gen.aclose()
 
         return StreamingResponse(
-            stream(),
+            _locked_stream(slot_index, stream()),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -527,7 +541,7 @@ async def continue_chat(slot_index: int):
             yield _sse(_exception_error_event(e, "message_id", message_id))
 
     return StreamingResponse(
-        stream(),
+        _locked_stream(slot_index, stream()),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

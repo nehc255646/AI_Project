@@ -105,3 +105,14 @@ class ExportData(BaseModel):
     created_at: str
     updated_at: str
     messages: list
+
+
+class ImportSlotRequest(BaseModel):
+    """完整存档备份导入数据。"""
+    model: str
+    system_prompt: str = "使用中文回答"
+    api_key: str = ""
+    title: str = ""
+    params: Optional[dict] = None
+    dual_config: Optional[dict] = None
+    messages: list = Field(default_factory=list)

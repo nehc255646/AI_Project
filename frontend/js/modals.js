@@ -388,6 +388,45 @@ export async function openExportModal() {
   }
 }
 
+export async function exportSlotBackup() {
+  const idx = state.currentSlotIndex;
+  if (idx === null) return;
+  try {
+    const data = await apiGet(`/api/slots/${idx}/backup`);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${data.title || `存档-${idx + 1}`}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("存档备份已导出", "success");
+  } catch (e) {
+    showToast("导出备份失败: " + e.message, "error");
+  }
+}
+
+export function importSlotBackup(file) {
+  const idx = state.slots.findIndex((slot) => slot === null || slot === undefined);
+  if (idx < 0 || !file) {
+    if (file) showToast("没有可用的空存档位", "warning");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const backup = JSON.parse(reader.result);
+      await apiPost(`/api/slots/${idx}/backup`, backup);
+      showToast("存档备份已导入，请重新打开存档", "success");
+      window.location.reload();
+    } catch (e) {
+      showToast("导入备份失败: " + e.message, "error");
+    }
+  };
+  reader.onerror = () => showToast("无法读取备份文件", "error");
+  reader.readAsText(file);
+}
+
 // ── 帮助弹窗 ──
 
 export function openHelpModal() {

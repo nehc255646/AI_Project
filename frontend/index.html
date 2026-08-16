@@ -593,9 +593,18 @@
           🗑 清空对话
         </button>
 
-        <button id="export-chat-btn" class="btn-secondary">
-          📥 导出对话
-        </button>
+         <button id="export-chat-btn" class="btn-secondary">
+           📥 导出对话
+         </button>
+
+         <button id="backup-slot-btn" class="btn-secondary">
+           💾 导出存档备份
+         </button>
+
+         <button id="import-slot-btn" class="btn-secondary">
+           📤 导入存档备份
+         </button>
+         <input id="import-slot-input" type="file" accept="application/json,.json" hidden />
       </div>
     </aside>
 
@@ -605,6 +614,7 @@
       <div id="slot-view">
         <header id="slot-header">
           <button id="help-btn-slot" class="help-btn-top" title="帮助">❓ 帮助</button>
+          <button id="import-backup-slot-btn" class="help-btn-top" title="导入存档备份">📤 导入备份</button>
           <div class="slot-header-content">
             <div class="slot-header-icon">✦</div>
             <h1 class="slot-header-title">AI 对话智能体</h1>

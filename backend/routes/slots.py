@@ -16,6 +16,7 @@ from models import (
     DualToggleRequest,
     SlotDetail,
     ExportData,
+    ImportSlotRequest,
 )
 from helpers import error, resolve_slot, check_api_key, validate_model_key
 from state import get_slot_mgr
@@ -250,3 +251,58 @@ def export_chat(slot_index: int):
         updated_at=data.get("updated_at", ""),
         messages=data.get("history", []),
     ).model_dump()
+
+
+@router.get("/api/slots/{slot_index}/backup")
+def export_backup(slot_index: int):
+    """导出可完整恢复存档的 JSON 备份。"""
+    data = resolve_slot(slot_index)
+    return {
+        "version": 1,
+        "index": slot_index,
+        "model": data.get("model", ""),
+        "system_prompt": data.get("system_prompt", ""),
+        "api_key": data.get("api_key", ""),
+        "title": data.get("title", ""),
+        "params": data.get("params", {}) or {},
+        "dual_config": data.get("dual_config", {}) or {},
+        "messages": data.get("history", []),
+    }
+
+
+@router.post("/api/slots/{slot_index}/backup")
+def import_backup(slot_index: int, req: ImportSlotRequest):
+    """将 JSON 备份导入空存档位。"""
+    if slot_index < 0 or slot_index >= SLOT_COUNT:
+        error("invalid_slot", f"无效的存档位: {slot_index}", 400)
+    mgr = get_slot_mgr()
+    if mgr.get_slot(slot_index) is not None:
+        error("slot_in_use", f"存档位 #{slot_index + 1} 已被使用", 409)
+
+    cfg = validate_model_key(req.model)
+    check_api_key(cfg["provider"], req.api_key)
+    dual_config = req.dual_config or {}
+    if dual_config.get("enabled"):
+        model2 = dual_config.get("model2") or {}
+        model2_cfg = validate_model_key(model2.get("model", ""))
+        check_api_key(model2_cfg["provider"], model2.get("api_key", ""))
+
+    if not mgr.create_slot(
+        slot_index, req.model, req.system_prompt, req.api_key,
+        req.params, req.title, dual_config=dual_config,
+    ):
+        error("import_failed", "导入存档失败", 500)
+
+    messages = [
+        {
+            "role": message.get("role", ""),
+            "content": message.get("content", ""),
+            "source": message.get("source", ""),
+        }
+        for message in req.messages
+        if isinstance(message, dict)
+    ]
+    if messages and not mgr.append_messages(slot_index, messages):
+        mgr.delete_slot(slot_index)
+        error("import_failed", "导入存档消息失败", 500)
+    return {"ok": True}

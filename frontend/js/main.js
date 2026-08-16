@@ -20,7 +20,7 @@ import {
 } from "./ui.js";
 
 // ── 弹窗 ──
-import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal } from "./modals.js";
+import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal, exportSlotBackup, importSlotBackup } from "./modals.js";
 
 // ── 对话 ──
 import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode, continueLastReply } from "./chat.js";
@@ -81,6 +81,13 @@ function setupEventListeners() {
 
   // 导出
   $("#export-chat-btn").addEventListener("click", openExportModal);
+  $("#backup-slot-btn").addEventListener("click", exportSlotBackup);
+  $("#import-slot-btn").addEventListener("click", () => $("#import-slot-input").click());
+  $("#import-backup-slot-btn").addEventListener("click", () => $("#import-slot-input").click());
+  $("#import-slot-input").addEventListener("change", (e) => {
+    importSlotBackup(e.target.files[0]);
+    e.target.value = "";
+  });
 
   // 帮助
   $("#help-btn-slot").addEventListener("click", openHelpModal);
