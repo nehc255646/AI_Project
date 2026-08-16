@@ -52,16 +52,17 @@
           <h3 class="help-section-title">📖 快速开始</h3>
           <ol class="help-list">
             <li>在主页点击「<strong>+ 空存档</strong>」，选择「单模型」或「双模型 Role-Play」</li>
-            <li><strong>单模型：</strong>选择模型 → 调整参数 → 设置系统提示词与标题，即可开始对话</li>
-            <li><strong>双模型：</strong>分别配置两个模型（角色名、模型、参数、提示词），两个模型会依次回答，适合角色扮演</li>
-            <li>需要 API Key 的模型会提示填写；如已在 <code>.env</code> 中配置则自动识别</li>
-            <li>在输入框输入消息，按 <kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</li>
-            <li>不想输入新消息时，点输入框旁的「<strong>⏩ 继续</strong>」：单模型延续上一条回复，双模型则两个模型各回复一轮</li>
+            <li><strong>先选提供商，再选模型：</strong>提供商下拉列出 DeepSeek / 阿里云百炼 / Ollama / OpenAI / Gemini / opencode go，选定后模型下拉只显示该提供商下的模型</li>
+            <li>需要密钥的提供商：已配置环境变量则自动识别；否则会显示密钥输入框，密钥仅与该存档绑定</li>
+            <li><strong>单模型：</strong>调整参数 → 设置系统提示词与标题 → 即可开始对话</li>
+            <li><strong>双模型：</strong>分别配置两个模型（角色名、提供商、模型、参数、提示词），两个模型会依次回答，适合角色扮演</li>
+            <li>输入消息后按 <kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</li>
+            <li>不想输入新消息时，点「<strong>⏩ 继续</strong>」：单模型延续上一条回复，双模型则两个模型各回复一轮</li>
           </ol>
         </section>
 
         <section class="help-section">
-          <h3 class="help-section-title">🔑 提供商与模型说明</h3>
+          <h3 class="help-section-title">🔑 提供商与模型</h3>
           <div class="help-model-list">
             <div class="help-model-item">
               <div class="help-model-name">DeepSeek 官方 <span class="help-model-badge" style="background:#7c3aed">推荐</span></div>
@@ -69,15 +70,15 @@
             </div>
             <div class="help-model-item">
               <div class="help-model-name">阿里云百炼官方</div>
-              <div class="help-model-desc">qwen-3.8-max / qwen-3.7-max / qwen-3.7-plus、deepseek 系列、GLM-5.2、kimi-k3<br>环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
+              <div class="help-model-desc">qwen-3.8-max / qwen-3.7-max / qwen-3.7-plus、deepseek-v4 系列、GLM-5.2、kimi-k3<br>环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">Ollama Cloud</div>
-              <div class="help-model-desc">minimax-m3:cloud、nemotron-3-ultra:cloud 等云端托管模型<br>环境变量 <code>OLLAMA_API_KEY</code></div>
+              <div class="help-model-desc">minimax-m3:cloud、nemotron-3-ultra:cloud、glm-4.7:cloud 等云端托管模型<br>环境变量 <code>OLLAMA_API_KEY</code></div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">Ollama 本地</div>
-              <div class="help-model-desc">调用本机 Ollama（localhost:11434）已安装的模型，免密钥<br>需保持本机 Ollama 服务运行</div>
+              <div class="help-model-desc">调用本机 Ollama（localhost:11434）已安装的模型，<strong>免密钥</strong><br>需保持本机 Ollama 服务运行，模型须已 <code>ollama pull</code></div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">OpenAI 官方</div>
@@ -85,27 +86,28 @@
             </div>
             <div class="help-model-item">
               <div class="help-model-name">Gemini 官方</div>
-              <div class="help-model-desc">gemini-3.7-flash / gemini-3.6-flash<br>环境变量 <code>GEMINI_API_KEY</code></div>
+              <div class="help-model-desc">gemini-3.7-flash / gemini-3.6-flash<br>环境变量 <code>GEMINI_API_KEY</code>（AIza 开头）</div>
             </div>
             <div class="help-model-item">
               <div class="help-model-name">opencode go 订阅</div>
-              <div class="help-model-desc">glm-5.3 / glm-5.2、kimi-k3 / kimi-k2.6、deepseek-v4 系列、mimo-v2.5 系列、hy3<br>环境变量 <code>OPENCODE_API_KEY</code></div>
+              <div class="help-model-desc">glm-5.3 / glm-5.2、kimi-k3 / kimi-k2.6、deepseek-v4 系列、mimo-v2.5 系列、hy3<br>环境变量 <code>OPENCODE_API_KEY</code>（在 opencode.ai 订阅后获取）</div>
             </div>
           </div>
+          <p class="create-hint" style="margin-top:10px">各提供商下可用的全部模型以创建向导的模型下拉框为准。</p>
         </section>
 
         <section class="help-section">
           <h3 class="help-section-title">💡 操作技巧</h3>
           <ul class="help-list">
-            <li><strong>10 个存档位：</strong>每个存档独立绑定模型和提示词，互不干扰，可同时开启多段对话</li>
-            <li><strong>双模型回复模式：</strong>在侧栏可切换「同时回复 / 仅模型1 / 仅模型2」，并调整谁先回复；模型2 会看到模型1 的回复</li>
-            <li><strong>重新生成：</strong>鼠标悬停在 AI 回复上，点击 ↻ 按钮重新生成该条回复，最后一条的 ↻ 按钮常亮显示</li>
-            <li><strong>编辑消息：</strong>鼠标悬停在自己的消息上，点击 ✏️ 按钮编辑内容，保存后自动重新发送</li>
-            <li><strong>取消回复：</strong>AI 回复时可点击顶栏的 ■ 按钮取消，已发的消息会回滚并恢复到输入框</li>
+            <li><strong>10 个存档位：</strong>每个存档独立绑定提供商、模型和提示词，互不干扰，可同时开启多段对话</li>
+            <li><strong>密钥配置：</strong>推荐在系统环境变量中配置（新进程启动后生效），也可在创建存档时按存档单独填写</li>
+            <li><strong>双模型回复模式：</strong>在侧栏切换「同时回复 / 仅模型1 / 仅模型2」及谁先回复；模型2 会看到模型1 的回复</li>
+            <li><strong>重新生成：</strong>悬停 AI 回复，点击 ↻ 重新生成该条回复，最后一条的 ↻ 常亮</li>
+            <li><strong>编辑 / 删除消息：</strong>悬停自己的消息点 ✏️ 编辑（保存后自动重发），或用删除按钮移除</li>
+            <li><strong>取消回复：</strong>回复中点击顶栏 ■ 可取消，已写入的消息会回滚并恢复到输入框</li>
             <li><strong>编辑标题：</strong>在侧栏点击标题或 ✏️ 按钮即可重命名存档</li>
-            <li><strong>Ollama 连接失败：</strong>会自动弹出输入框补填 Ollama Cloud API Key，保存后自动重试</li>
-            <li><strong>导出对话：</strong>在侧栏点击「导出对话」可将整段对话导出为 Markdown</li>
-            <li><strong>环境变量：</strong>在项目根目录 <code>.env</code> 文件中配置，格式为 <code>DEEPSEEK_API_KEY=sk-xxx</code> 或 <code>DASHSCOPE_API_KEY=sk-xxx</code></li>
+            <li><strong>导出对话：</strong>侧栏「导出对话」可将整段对话导出为 Markdown</li>
+            <li><strong>全部接口统一为 OpenAI 兼容：</strong>全局禁用模型思考，回复直接输出最终内容</li>
           </ul>
         </section>
 
