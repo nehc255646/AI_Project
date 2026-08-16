@@ -99,17 +99,69 @@ function showStep(step) {
   }
 }
 
+// ── 提供商配置 ──
+
+const PROVIDER_META = {
+  deepseek: { label: "DeepSeek 官方" },
+  dashscope: { label: "阿里云百炼官方" },
+  ollama_cloud: { label: "Ollama Cloud" },
+  ollama_local: { label: "Ollama 本地", noKey: true },
+  openai: { label: "OpenAI 官方" },
+  gemini: { label: "Gemini 官方" },
+  opencode: { label: "opencode go 订阅" },
+};
+const PROVIDER_ORDER = [
+  "deepseek", "dashscope", "ollama_cloud", "ollama_local",
+  "openai", "gemini", "opencode",
+];
+
+function providerSelectIdFor(modelSelectId) {
+  return modelSelectId === "create-model2-select" ? "create-provider2-select" : "create-provider-select";
+}
+
+function getProviders() {
+  const set = new Set((state.models || []).map((m) => m.provider).filter(Boolean));
+  return PROVIDER_ORDER.filter((p) => set.has(p));
+}
+
 function populateModelSelect(selectId, selectedKey) {
   const select = document.getElementById(selectId);
   if (!select) return;
+  const provider = document.getElementById(providerSelectIdFor(selectId))?.value || "";
+  const list = (state.models || []).filter((m) => !provider || m.provider === provider);
   select.innerHTML = "";
-  (state.models || []).forEach((m) => {
+  let firstKey = null;
+  list.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.key;
-    opt.textContent = m.key;
+    opt.textContent = m.id || m.key;
     if (m.key === selectedKey) opt.selected = true;
+    if (firstKey === null) firstKey = m.key;
     select.appendChild(opt);
   });
+  if (list.length && !list.some((m) => m.key === select.value)) {
+    select.value = firstKey;
+  }
+}
+
+function populateProviderSelect(providerSelectId, modelSelectId, selectedKey) {
+  const pSelect = document.getElementById(providerSelectId);
+  if (!pSelect) return;
+  const providers = getProviders();
+  pSelect.innerHTML = "";
+  providers.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p;
+    opt.textContent = (PROVIDER_META[p] || {}).label || p;
+    pSelect.appendChild(opt);
+  });
+  const target = (state.models || []).find((m) => m.key === selectedKey);
+  if (target && providers.includes(target.provider)) {
+    pSelect.value = target.provider;
+  } else if (providers.length) {
+    pSelect.value = providers[0];
+  }
+  populateModelSelect(modelSelectId, selectedKey);
 }
 
 function updateParamDisplays(suffix = "") {
@@ -144,8 +196,8 @@ export async function openCreateModal(index) {
   document.getElementById("step1-title").textContent = "选择模型";
 
   // 填充模型下拉框
-  populateModelSelect("create-model-select", "DeepSeek-v4-flash");
-  populateModelSelect("create-model2-select", "DeepSeek-v4-flash");
+  populateProviderSelect("create-provider-select", "create-model-select", "deepseek:deepseek-v4-flash");
+  populateProviderSelect("create-provider2-select", "create-model2-select", "deepseek:deepseek-v4-flash");
 
   // 重置值
   document.getElementById("create-model1-name").value = "";
@@ -210,16 +262,17 @@ export function updateApiKeyField() {
   if (!model) return;
 
   const provider = model.provider || "";
+  const meta = PROVIDER_META[provider] || {};
   const hasEnv = state.envStatus[provider] === true;
-  if (hasEnv || provider === "ollama") {
+  if (hasEnv || meta.noKey) {
     field.style.display = "none";
     input.value = "";
     input.required = false;
   } else {
     field.style.display = "block";
-    const nameMap = { deepseek: "DeepSeek", dashscope: "DashScope" };
-    label.textContent = `${nameMap[provider] || provider} API 密钥`;
-    input.placeholder = `请输入你的 ${nameMap[provider] || provider} API Key`;
+    const name = meta.label || provider;
+    label.textContent = `${name} API 密钥`;
+    input.placeholder = `请输入你的 ${name} API Key`;
     input.required = true;
   }
 }
@@ -235,16 +288,17 @@ export function updateApiKeyField2() {
   if (!model) return;
 
   const provider = model.provider || "";
+  const meta = PROVIDER_META[provider] || {};
   const hasEnv = state.envStatus[provider] === true;
-  if (hasEnv || provider === "ollama") {
+  if (hasEnv || meta.noKey) {
     field.style.display = "none";
     input.value = "";
     input.required = false;
   } else {
     field.style.display = "block";
-    const nameMap = { deepseek: "DeepSeek", dashscope: "DashScope" };
-    label.textContent = `${nameMap[provider] || provider} API 密钥`;
-    input.placeholder = `请输入你的 ${nameMap[provider] || provider} API Key`;
+    const name = meta.label || provider;
+    label.textContent = `${name} API 密钥`;
+    input.placeholder = `请输入你的 ${name} API Key`;
     input.required = true;
   }
 }
@@ -260,10 +314,12 @@ export async function openExportModal() {
   try {
     const data = await apiGet(`/api/slots/${idx}/chat/export`);
 
+    const modelKey = data.model || "";
+    const modelDisplay = modelKey.includes(":") ? modelKey.split(":").pop() : (modelKey || "未知");
     const lines = [
       `# ${data.title || "对话导出"}`,
       "",
-      `**模型**: ${data.model || "未知"}`,
+      `**模型**: ${modelDisplay}`,
       `**系统提示词**: ${data.system_prompt || "无"}`,
       `**创建时间**: ${data.created_at || "未知"}`,
       `**更新时间**: ${data.updated_at || "未知"}`,
@@ -358,7 +414,7 @@ export function initModalListeners() {
         document.getElementById("step3-dual").style.display = "block";
         document.getElementById("step3-icon").textContent = MODEL2_ICON;
         document.getElementById("step3-title").textContent = "模型 2 配置";
-        populateModelSelect("create-model2-select", "DeepSeek-v4-flash");
+        populateProviderSelect("create-provider2-select", "create-model2-select", "deepseek:deepseek-v4-flash");
       } else {
         document.getElementById("field-model1-name").style.display = "none";
         document.getElementById("step1-icon").textContent = "🤖";
@@ -511,8 +567,16 @@ export function initModalListeners() {
     if (e.target === createModal) closeCreateModal();
   });
 
-  // 模型切换 API Key 联动
+  // 提供商/模型切换 API Key 联动
+  document.getElementById("create-provider-select").addEventListener("change", () => {
+    populateModelSelect("create-model-select");
+    updateApiKeyField();
+  });
   document.getElementById("create-model-select").addEventListener("change", updateApiKeyField);
+  document.getElementById("create-provider2-select").addEventListener("change", () => {
+    populateModelSelect("create-model2-select");
+    updateApiKeyField2();
+  });
   document.getElementById("create-model2-select").addEventListener("change", updateApiKeyField2);
 
   // 参数滑块联动

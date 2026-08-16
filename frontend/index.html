@@ -61,27 +61,35 @@
         </section>
 
         <section class="help-section">
-          <h3 class="help-section-title">🔑 模型说明</h3>
+          <h3 class="help-section-title">🔑 提供商与模型说明</h3>
           <div class="help-model-list">
             <div class="help-model-item">
-              <div class="help-model-name">DeepSeek-v4-flash <span class="help-model-badge" style="background:#7c3aed">推荐</span></div>
-              <div class="help-model-desc">官网注册 → 创建 API Key → 配置环境变量 <code>DEEPSEEK_API_KEY=sk-xxxx</code><br>快速平衡，适合日常对话</div>
+              <div class="help-model-name">DeepSeek 官方 <span class="help-model-badge" style="background:#7c3aed">推荐</span></div>
+              <div class="help-model-desc">deepseek-v4-flash（快速平衡）、deepseek-v4-pro（更强更慢）<br>环境变量 <code>DEEPSEEK_API_KEY=sk-xxxx</code></div>
             </div>
             <div class="help-model-item">
-              <div class="help-model-name">DeepSeek-v4-Pro</div>
-              <div class="help-model-desc">同样需要 DeepSeek API Key，能力更强但速度稍慢，适合复杂任务</div>
+              <div class="help-model-name">阿里云百炼官方</div>
+              <div class="help-model-desc">qwen-3.8-max / qwen-3.7-max / qwen-3.7-plus、deepseek 系列、GLM-5.2、kimi-k3<br>环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
             </div>
             <div class="help-model-item">
-              <div class="help-model-name">通义千问（Qwen3.6-Flash / Qwen3.7-Max）</div>
-              <div class="help-model-desc">阿里云开通 DashScope → 创建 API Key → 配置环境变量 <code>DASHSCOPE_API_KEY=sk-xxxx</code></div>
+              <div class="help-model-name">Ollama Cloud</div>
+              <div class="help-model-desc">minimax-m3:cloud、nemotron-3-ultra:cloud 等云端托管模型<br>环境变量 <code>OLLAMA_API_KEY</code></div>
             </div>
             <div class="help-model-item">
-              <div class="help-model-name">Minimax-M3</div>
-              <div class="help-model-desc">模型托管在 <strong>Ollama Cloud</strong> 云端服务。<br>本机已安装 Ollama 客户端并保持运行（localhost:11434）时免密钥调用；否则需提供 Ollama Cloud API Key</div>
+              <div class="help-model-name">Ollama 本地</div>
+              <div class="help-model-desc">调用本机 Ollama（localhost:11434）已安装的模型，免密钥<br>需保持本机 Ollama 服务运行</div>
             </div>
             <div class="help-model-item">
-              <div class="help-model-name">Nemotron-3-Ultra</div>
-              <div class="help-model-desc">同样走 Ollama Cloud 云端服务，使用方式与 Minimax-M3 相同</div>
+              <div class="help-model-name">OpenAI 官方</div>
+              <div class="help-model-desc">gpt-5.6-luna / gpt-5.6-sol / gpt-5.6-terra<br>环境变量 <code>OPENAI_API_KEY=sk-xxxx</code></div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">Gemini 官方</div>
+              <div class="help-model-desc">gemini-3.7-flash / gemini-3.6-flash<br>环境变量 <code>GEMINI_API_KEY</code></div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">opencode go 订阅</div>
+              <div class="help-model-desc">glm-5.3 / glm-5.2、kimi-k3 / kimi-k2.6、deepseek-v4 系列、mimo-v2.5 系列、hy3<br>环境变量 <code>OPENCODE_API_KEY</code></div>
             </div>
           </div>
         </section>
@@ -187,6 +195,13 @@
         <div class="create-field" id="field-model1-name" style="display:none">
           <label class="create-label">🎭 角色名称</label>
           <input type="text" id="create-model1-name" class="create-input" placeholder="如: 侦探、魔法师、顾问…" maxlength="20" />
+        </div>
+        <div class="create-field">
+          <label class="create-label">AI 提供商</label>
+          <div class="select-wrapper">
+            <select id="create-provider-select"></select>
+            <span class="select-arrow">▼</span>
+          </div>
         </div>
         <div class="create-field">
           <label class="create-label">AI 模型</label>
@@ -318,6 +333,13 @@
           <div class="create-field">
             <label class="create-label">🌟 角色名称</label>
             <input type="text" id="create-model2-name" class="create-input" placeholder="如: 评论员、助手、对手…" maxlength="20" />
+          </div>
+          <div class="create-field">
+            <label class="create-label">AI 提供商</label>
+            <div class="select-wrapper">
+              <select id="create-provider2-select"></select>
+              <span class="select-arrow">▼</span>
+            </div>
           </div>
           <div class="create-field">
             <label class="create-label">AI 模型</label>

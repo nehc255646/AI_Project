@@ -188,25 +188,21 @@ def update_slot_title(slot_index: int, req: dict):
 
 @router.patch("/api/slots/{slot_index}/api-key")
 def update_slot_api_key(slot_index: int, req: dict):
-    """更新存档的 API Key（Ollama 连接失败后补填用）。
+    """更新存档的 API Key（连接失败后补填用）。
 
-    仅写入 provider 为 ollama 的模型。
+    主模型密钥写入 slot.api_key；双模型的模型2密钥写入 dual_config。
     """
     data = resolve_slot(slot_index)
     api_key = (req.get("api_key") or "").strip()
     if not api_key:
         error("empty_api_key", "API Key 不能为空", 400)
 
-    # 模型1（存档主模型）为 Ollama 时才更新 slot.api_key
-    slot_cfg = MODEL_CONFIG.get(data.get("model", "")) or {}
-    if slot_cfg.get("provider") == "ollama":
-        get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
+    # 更新主模型密钥
+    get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
 
-    # 模型2 为 Ollama 时才更新 dual_config.model2.api_key
+    # 双模型时同步更新模型2密钥
     dual_config = data.get("dual_config", {}) or {}
-    m2 = dual_config.get("model2") or {}
-    m2_cfg = MODEL_CONFIG.get(m2.get("model", "")) or {}
-    if dual_config.get("enabled") and m2_cfg.get("provider") == "ollama":
+    if dual_config.get("enabled") and dual_config.get("model2"):
         dual_config["model2"]["api_key"] = api_key
         get_slot_mgr().update_dual_config(slot_index, dual_config)
     return {"ok": True}

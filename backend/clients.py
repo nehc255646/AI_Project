@@ -1,98 +1,66 @@
 """
-AI 客户端层 — 面向 DeepSeek / DashScope / Ollama 的异步流式对话调用。
+AI 客户端层 — 统一通过 OpenAI 兼容接口调用各提供商模型。
 
-支持 OpenAI 兼容接口的流式请求、Ollama 健康检查（30 秒冷却缓存）
-以及 API 临时故障的自动重试。
+支持流式对话、API 临时故障的自动重试（指数退避）、
+密钥解析（存档密钥优先，其次环境变量）。
 """
 import asyncio
-import json
 import logging
-import time
-from typing import AsyncGenerator, List, Dict
+import os
+from typing import AsyncGenerator, Dict, List, Tuple
 
 import httpx
 from openai import AsyncOpenAI, APIError, APITimeoutError, RateLimitError
 
-from config import (
-    DEEPSEEK_API_KEY,
-    DEEPSEEK_BASE_URL,
-    DASHSCOPE_API_KEY,
-    DASHSCOPE_BASE_URL,
-    OLLAMA_API_KEY,
-    OLLAMA_URL,
-    OLLAMA_CLOUD_URL,
-    MODEL_CONFIG,
-)
+from config import PROVIDER_CONFIG, MODEL_CONFIG
 
 logger = logging.getLogger(__name__)
-
-_OLLAMA_CHECK_CACHE: dict = {"ok": False, "at": 0.0}
-_OLLAMA_CACHE_TTL = 30  # 冷却时间（秒）
 
 # API 调用重试配置
 _API_RETRY_MAX = 2
 _API_RETRY_DELAY = 1.0  # 初始延迟（秒），指数退避
 
+# 支持把 min_p / top_k 放进 extra_body 的提供商（其他提供商忽略，避免 400）
+_EXTRA_BODY_PROVIDERS = {"deepseek", "dashscope"}
+
 
 class AIClient:
     def __init__(self):
-        self._deepseek: AsyncOpenAI | None = None
-        self._dashscope: AsyncOpenAI | None = None
-        self._ollama_client: httpx.AsyncClient | None = None
-
-    def _get_ollama_client(self) -> httpx.AsyncClient:
-        if not self._ollama_client:
-            self._ollama_client = httpx.AsyncClient(timeout=120)
-        return self._ollama_client
+        # 按 (base_url, api_key) 缓存客户端
+        self._clients: Dict[Tuple[str, str], AsyncOpenAI] = {}
 
     async def close(self) -> None:
-        """释放 httpx 连接（服务关闭时调用）。"""
-        if self._ollama_client is not None:
+        """释放所有 OpenAI 兼容客户端（服务关闭时调用）。"""
+        for client in self._clients.values():
             try:
-                await self._ollama_client.aclose()
+                await client.close()
             except Exception:
                 pass
-            self._ollama_client = None
+        self._clients.clear()
 
-    # ── Lazy client init ──
-
-    def _client_deepseek(self) -> AsyncOpenAI:
-        if not self._deepseek:
-            if not DEEPSEEK_API_KEY:
-                raise ValueError("DEEPSEEK_API_KEY 未在环境变量中设置")
-            self._deepseek = AsyncOpenAI(
-                api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL, timeout=60
+    def _get_client(self, provider: str, api_key: str) -> AsyncOpenAI:
+        cfg = PROVIDER_CONFIG.get(provider)
+        if not cfg:
+            raise ValueError(f"不支持的提供商: {provider}")
+        cache_key = (cfg["base_url"], api_key)
+        if cache_key not in self._clients:
+            self._clients[cache_key] = AsyncOpenAI(
+                api_key=api_key, base_url=cfg["base_url"], timeout=60
             )
-        return self._deepseek
+        return self._clients[cache_key]
 
-    def _client_dashscope(self) -> AsyncOpenAI:
-        if not self._dashscope:
-            if not DASHSCOPE_API_KEY:
-                raise ValueError("DASHSCOPE_API_KEY 未在环境变量中设置")
-            self._dashscope = AsyncOpenAI(
-                api_key=DASHSCOPE_API_KEY, base_url=DASHSCOPE_BASE_URL, timeout=60
-            )
-        return self._dashscope
-
-    # ── Ollama 健康检查（带冷却缓存） ──
-
-    async def _check_ollama(self) -> bool:
-        now = time.time()
-        if now - _OLLAMA_CHECK_CACHE["at"] < _OLLAMA_CACHE_TTL:
-            return _OLLAMA_CHECK_CACHE["ok"]
-        hosts = ("127.0.0.1", "localhost")
-        async def _try_host(host: str) -> bool:
-            try:
-                url = f"http://{host}:11434/api/tags"
-                r = await self._get_ollama_client().get(url, timeout=5)
-                return r.status_code == 200
-            except Exception:
-                return False
-        results = await asyncio.gather(*(_try_host(h) for h in hosts), return_exceptions=True)
-        ok = any(r is True for r in results)
-        _OLLAMA_CHECK_CACHE["ok"] = ok
-        _OLLAMA_CHECK_CACHE["at"] = now
-        return ok
+    def _resolve_api_key(self, provider: str, api_key: str) -> str:
+        """密钥解析：存档传入的密钥优先，其次环境变量，Ollama 本地用占位密钥。"""
+        cfg = PROVIDER_CONFIG.get(provider, {})
+        if provider == "ollama_local":
+            return cfg.get("dummy_api_key", "ollama")
+        if api_key:
+            return api_key
+        env_name = cfg.get("api_key_env", "")
+        env_val = os.environ.get(env_name) if env_name else ""
+        if env_val:
+            return env_val
+        raise ValueError(f"{cfg.get('name', provider)} API Key 未配置，请在创建存档时提供")
 
     # ── 对外入口：流式对话 ──
 
@@ -107,75 +75,43 @@ class AIClient:
 
         provider = cfg["provider"]
         model_id = cfg["id"]
+        key = self._resolve_api_key(provider, api_key)
+        client = self._get_client(provider, key)
 
         if max_tokens is None:
             max_tokens = cfg.get("max_tokens")
-
         # 用户参数中的 num_predict 优先于模型配置的 max_tokens
-        if params and "num_predict" in params:
+        if params and params.get("num_predict") is not None:
             max_tokens = params["num_predict"]
-
-        thinking_disabled = cfg.get("thinking_disabled", False)
-
-        if provider == "ollama":
-            async for chunk in self._stream_ollama(
-                messages, model_id, max_tokens, thinking_disabled, params, api_key
-            ):
-                yield chunk
-        else:
-            base_url = (
-                DEEPSEEK_BASE_URL if provider == "deepseek" else DASHSCOPE_BASE_URL
-            )
-            async for chunk in self._stream_openai_compatible(
-                messages, model_id, base_url, api_key, max_tokens, thinking_disabled, params
-            ):
-                yield chunk
-
-    # ── OpenAI 兼容接口流式调用 ──
-
-    async def _stream_openai_compatible(
-        self,
-        messages: List[Dict],
-        model_id: str,
-        base_url: str,
-        api_key: str = "",
-        max_tokens: int | None = None,
-        thinking_disabled: bool = False,
-        params: dict | None = None,
-    ) -> AsyncGenerator[str, None]:
-        if api_key:
-            client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=60)
-        elif "dashscope" in base_url:
-            client = self._client_dashscope()
-        else:
-            client = self._client_deepseek()
 
         kwargs = dict(model=model_id, messages=messages, stream=True)
 
-        # 用户参数（OpenAI 兼容参数）
+        # OpenAI 兼容通用参数
         if params:
-            for key in ("temperature", "top_p", "presence_penalty", "frequency_penalty"):
-                if key in params:
-                    kwargs[key] = params[key]
-            if "max_tokens" not in kwargs and params.get("num_predict") is not None:
-                kwargs["max_tokens"] = params["num_predict"]
+            for k in ("temperature", "top_p", "presence_penalty", "frequency_penalty"):
+                if k in params:
+                    kwargs[k] = params[k]
 
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
 
-        # extra_body：非标准参数 + 禁用思考
+        # 全局禁用思考（按提供商配置的参数形式）
+        disable_thinking = PROVIDER_CONFIG.get(provider, {}).get("disable_thinking")
+        if disable_thinking:
+            for k, v in disable_thinking.items():
+                if k == "extra_body":
+                    kwargs.setdefault("extra_body", {}).update(v)
+                else:
+                    kwargs[k] = v
+
+        # extra_body：仅部分提供商支持的非标准参数
         extra_body = {}
-        if thinking_disabled:
-            if "dashscope" in base_url:
-                extra_body["enable_thinking"] = False
-            else:
-                extra_body["thinking"] = {"type": "disabled"}
-        if params:
-            for key in ("min_p", "top_k"):
-                if key in params:
-                    extra_body[key] = params[key]
+        if provider in _EXTRA_BODY_PROVIDERS and params:
+            for k in ("min_p", "top_k"):
+                if k in params:
+                    extra_body[k] = params[k]
         if extra_body:
-            kwargs["extra_body"] = extra_body
+            kwargs.setdefault("extra_body", {}).update(extra_body)
 
         # 仅请求阶段可重试，流式输出开始后中断直接失败
         last_exception = None
@@ -235,67 +171,3 @@ class AIClient:
 
         # 所有重试耗尽
         raise ConnectionError(f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}")
-
-    # ── Ollama 流式调用（接口格式不同，单独实现） ──
-
-    async def _stream_ollama(
-        self, messages: List[Dict], model_id: str,
-        max_tokens: int | None = None,
-        thinking_disabled: bool = False,
-        params: dict | None = None,
-        api_key: str = "",
-    ) -> AsyncGenerator[str, None]:
-        # 优先检测本地 Ollama，不可用才走云端
-        local_ok = await self._check_ollama()
-        if local_ok:
-            url = OLLAMA_URL
-        elif api_key or OLLAMA_API_KEY:
-            url = OLLAMA_CLOUD_URL
-            key = api_key or OLLAMA_API_KEY
-        else:
-            raise ConnectionError(
-                "NEED_KEY:无法连接到本地 Ollama，请提供 Ollama Cloud API Key 以使用云端"
-            )
-
-        payload = {"model": model_id, "messages": messages, "stream": True}
-
-        # 将参数放入 options（Ollama 风格）
-        options = {}
-        if params:
-            for key in ("temperature", "top_p", "top_k", "min_p",
-                         "repeat_penalty", "presence_penalty",
-                         "frequency_penalty", "num_ctx", "num_predict"):
-                if key in params:
-                    options[key] = params[key]
-        if max_tokens is not None:
-            options["num_predict"] = max_tokens
-        if options:
-            payload["options"] = options
-
-        if thinking_disabled:
-            payload["think"] = False
-        client = self._get_ollama_client()
-        headers = {}
-        if url == OLLAMA_CLOUD_URL:
-            headers["Authorization"] = f"Bearer {key}"
-        try:
-            async with client.stream(
-                "POST", url, json=payload, headers=headers or None
-            ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if "message" in chunk and "content" in chunk["message"]:
-                            yield chunk["message"]["content"]
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            if status == 401:
-                raise ValueError("Ollama 认证失败，请检查 API Key 是否正确") from e
-            raise ConnectionError(f"Ollama 服务返回错误 ({status})") from e
-        except (httpx.TransportError, httpx.HTTPError) as e:
-            raise ConnectionError(f"无法连接 Ollama 服务，请确认本地服务已启动或 Key 正确: {e}") from e

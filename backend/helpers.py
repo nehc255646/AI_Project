@@ -3,9 +3,11 @@
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import HTTPException
 
-from config import SLOT_COUNT, MODEL_CONFIG
+from config import SLOT_COUNT, MODEL_CONFIG, PROVIDER_CONFIG
 from state import get_slot_mgr
 
 
@@ -33,26 +35,24 @@ def validate_model_key(model_key: str) -> dict:
     if not cfg:
         error("unknown_model", f"不支持的模型: {model_key}", 400)
     provider = cfg.get("provider", "")
-    if provider not in ("deepseek", "dashscope", "ollama"):
+    if provider not in PROVIDER_CONFIG:
         error("invalid_provider", f"模型 {model_key} 的 provider 配置无效: {provider}", 500)
     return cfg
 
 
 def check_api_key(provider: str, api_key: str) -> None:
-    """校验 API Key 是否已配置（Ollama 除外，连接失败时再提示）。"""
-    from config import DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, OLLAMA_API_KEY
+    """校验 API Key 是否已配置（Ollama 本地除外，连接失败时再提示）。"""
+    cfg = PROVIDER_CONFIG.get(provider, {})
 
-    if provider == "ollama":
+    if provider == "ollama_local":
         return
 
-    env_map = {"deepseek": DEEPSEEK_API_KEY, "dashscope": DASHSCOPE_API_KEY}
-    name_map = {"deepseek": "DeepSeek", "dashscope": "DashScope"}
-
-    env_key = env_map.get(provider, "")
+    env_name = cfg.get("api_key_env", "")
+    env_key = os.environ.get(env_name) if env_name else ""
     if env_key:
         return
     if not api_key or not api_key.strip():
-        provider_name = name_map.get(provider, provider)
+        provider_name = cfg.get("name", provider)
         error(
             "missing_api_key",
             f"{provider_name} API Key 未在环境变量中设置，请在创建存档时提供有效的 API Key",

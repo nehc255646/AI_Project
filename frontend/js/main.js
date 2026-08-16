@@ -41,34 +41,22 @@ async function init() {
 
 async function loadModels() {
   try {
-    const models = await apiGet("/api/models");
-    state.models = models;
-    const select = document.getElementById("create-model-select");
-    select.innerHTML = "";
-    models.forEach((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.key;
-      opt.textContent = m.key;
-      select.appendChild(opt);
-    });
-    updateApiKeyField();
+    state.models = await apiGet("/api/models");
   } catch (_) {
     // 兜底：后端不可用时的备用模型列表，需与 backend/config.py 的 MODEL_CONFIG 保持一致
-    const fallback = [
-      { key: "Minimax-M3", provider: "ollama" },
-      { key: "Nemotron-3-Ultra", provider: "ollama" },
-      { key: "DeepSeek-v4-flash", provider: "deepseek" },
-      { key: "DeepSeek-v4-Pro", provider: "deepseek" },
-      { key: "Qwen3.6-Flash", provider: "dashscope" },
-      { key: "Qwen3.7-Max", provider: "dashscope" },
+    state.models = [
+      { key: "deepseek:deepseek-v4-flash", id: "deepseek-v4-flash", provider: "deepseek" },
+      { key: "deepseek:deepseek-v4-pro", id: "deepseek-v4-pro", provider: "deepseek" },
+      { key: "dashscope:qwen-3.8-max", id: "qwen-3.8-max", provider: "dashscope" },
+      { key: "dashscope:qwen-3.7-max", id: "qwen-3.7-max", provider: "dashscope" },
+      { key: "ollama_cloud:minimax-m3:cloud", id: "minimax-m3:cloud", provider: "ollama_cloud" },
+      { key: "ollama_local:qwen3.8:27b", id: "qwen3.8:27b", provider: "ollama_local" },
+      { key: "openai:gpt-5.6-luna", id: "gpt-5.6-luna", provider: "openai" },
+      { key: "gemini:gemini-3.7-flash", id: "gemini-3.7-flash", provider: "gemini" },
+      { key: "opencode:glm-5.3", id: "glm-5.3", provider: "opencode" },
     ];
-    state.models = fallback;
-    const select = document.getElementById("create-model-select");
-    select.innerHTML = fallback
-      .map((m) => `<option value="${m.key}">${m.key}</option>`)
-      .join("");
-    updateApiKeyField(); // 使用本地 fallback 数据更新 API Key 字段
   }
+  updateApiKeyField(); // 使用当前选中的模型更新 API Key 字段
 }
 
 async function loadEnvStatus() {

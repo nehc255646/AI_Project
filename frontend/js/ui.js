@@ -17,6 +17,12 @@ function el(id) {
   return document.getElementById(id);
 }
 
+function displayModel(key) {
+  if (!key) return "";
+  const idx = key.indexOf(":");
+  return idx > 0 ? key.slice(idx + 1) : key;
+}
+
 // ── 视图切换 ──
 
 export function showSlotView() {
@@ -88,7 +94,7 @@ export function renderSlotGrid() {
         <button class="slot-delete-btn" data-index="${i}" title="删除存档">✕</button>
         <div class="slot-card-content">
           <div class="slot-title">${escapeHtml(displayTitle.slice(0, 20))}</div>
-          <div class="slot-model-badge">${isDual ? "🎭🌟 双模型" : escapeHtml(info.model || "未知")}</div>
+          <div class="slot-model-badge">${isDual ? "🎭🌟 双模型" : escapeHtml(displayModel(info.model) || "未知")}</div>
           <div class="slot-time"><span class="slot-time-label">创建</span><span class="slot-time-value">${created || "未知"}</span></div>
           <div class="slot-time"><span class="slot-time-label">使用</span><span class="slot-time-value">${updated || "未知"}</span></div>
         </div>
@@ -279,7 +285,7 @@ export function updateSidebarInfo() {
   if (state.currentSlotData) {
     const title = state.currentSlotData.title || "未命名";
     el("slot-title-text").textContent = title;
-    el("slot-model-display").textContent = state.currentSlotData.model || "-";
+    el("slot-model-display").textContent = displayModel(state.currentSlotData.model) || "-";
 
     // 双模型信息
     const dualCfg = state.currentSlotData.dual_config || {};
@@ -289,13 +295,13 @@ export function updateSidebarInfo() {
       // 显示模型2
       const m2Display = el("slot-model2-display");
       if (m2Display) {
-        const m2Model = dualCfg.model2?.model || "";
+        const m2Model = displayModel(dualCfg.model2?.model) || "";
         m2Display.textContent = `🌟 ${m2Name} (${m2Model})`;
         m2Display.style.display = "block";
         m2Display.className = "model-display model-display-2";
       }
       // 更新模型1显示
-      el("slot-model-display").textContent = `🎭 ${m1Name} (${state.currentSlotData.model || "-"})`;
+      el("slot-model-display").textContent = `🎭 ${m1Name} (${displayModel(state.currentSlotData.model) || "-"})`;
 
       // 双模型提示词
       el("slot-prompt-display").textContent = `🎭 ${m1Name}: ${state.currentSlotData.system_prompt || "-"}`;
@@ -346,7 +352,7 @@ export function updateSidebarInfo() {
     el("current-model-badge").textContent = `${m1Name} + ${m2Name}`;
   } else {
     el("current-model-badge").textContent = state.currentSlotData
-      ? state.currentSlotData.model || ""
+      ? displayModel(state.currentSlotData.model) || ""
       : "";
   }
 }
