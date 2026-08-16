@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from config import SLOT_COUNT, MODEL_CONFIG
 from models import (
@@ -22,6 +23,11 @@ from state import get_slot_mgr
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["slots"])
+
+
+class ApiKeyUpdateRequest(BaseModel):
+    api_key: str
+    target: str = "model1"
 
 
 @router.get("/api/slots")
@@ -157,7 +163,7 @@ def edit_message(slot_index: int, req: EditMessageRequest):
     if req.message_id is not None:
         if req.message_id <= 0:
             error("invalid_message_id", "消息 ID 无效", 400)
-        success = mgr.update_message_content(req.message_id, req.content)
+        success = mgr.update_message_content(slot_index, req.message_id, req.content)
         if not success:
             error("message_not_found", f"消息 #{req.message_id} 不存在", 404)
         return {"ok": True}
@@ -170,7 +176,7 @@ def edit_message(slot_index: int, req: EditMessageRequest):
     target = history[req.index]
     if not target.get("id"):
         error("message_not_found", "无法定位消息 ID", 404)
-    if not mgr.update_message_content(target["id"], req.content):
+    if not mgr.update_message_content(slot_index, target["id"], req.content):
         error("message_not_found", f"消息 #{target['id']} 不存在", 404)
     return {"ok": True}
 
@@ -187,24 +193,30 @@ def update_slot_title(slot_index: int, req: dict):
 
 
 @router.patch("/api/slots/{slot_index}/api-key")
-def update_slot_api_key(slot_index: int, req: dict):
+def update_slot_api_key(slot_index: int, req: ApiKeyUpdateRequest):
     """更新存档的 API Key（连接失败后补填用）。
 
     主模型密钥写入 slot.api_key；双模型的模型2密钥写入 dual_config。
     """
     data = resolve_slot(slot_index)
-    api_key = (req.get("api_key") or "").strip()
+    api_key = req.api_key.strip()
     if not api_key:
         error("empty_api_key", "API Key 不能为空", 400)
 
-    # 更新主模型密钥
-    get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key})
+    if req.target not in ("model1", "model2"):
+        error("invalid_key_target", "API Key 所属模型无效", 400)
 
-    # 双模型时同步更新模型2密钥
-    dual_config = data.get("dual_config", {}) or {}
-    if dual_config.get("enabled") and dual_config.get("model2"):
+    if req.target == "model2":
+        dual_config = data.get("dual_config", {}) or {}
+        if not dual_config.get("enabled") or not dual_config.get("model2"):
+            error("model2_not_found", "模型 2 配置不存在", 400)
         dual_config["model2"]["api_key"] = api_key
-        get_slot_mgr().update_dual_config(slot_index, dual_config)
+        if not get_slot_mgr().update_dual_config(slot_index, dual_config):
+            error("update_failed", "API Key 更新失败", 500)
+        return {"ok": True}
+
+    if not get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key}):
+        error("update_failed", "API Key 更新失败", 500)
     return {"ok": True}
 
 

@@ -125,4 +125,5 @@ if __name__ == "__main__":
     reload_enabled = os.environ.get("UVICORN_RELOAD", "").strip().lower() in (
         "1", "true", "yes",
     )
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=reload_enabled)
+    host = os.environ.get("UVICORN_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    uvicorn.run("main:app", host=host, port=8000, reload=reload_enabled)

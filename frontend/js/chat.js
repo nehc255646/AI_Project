@@ -378,7 +378,7 @@ export async function sendMessage() {
                   const key = document.getElementById("ollama-key-input")?.value.trim();
                   if (!key) { showToast("请输入 API Key", "warning"); return; }
                   try {
-                    await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key });
+                    await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key, target: event.key_target || "model1" });
                     card.remove();
                     const input = document.getElementById("message-input");
                     if (input) { input.value = text; input.focus(); }
@@ -594,7 +594,7 @@ export async function continueLastReply() {
               // 后端尚未落库，恢复原内容并提示
               contentDiv.textContent = originalText;
               if (event.code === "ollama_need_key") {
-                showOllamaKeyCard(event.content, () => continueLastReply());
+                showOllamaKeyCard(event.content, () => continueLastReply(), event.key_target || "model1");
               } else {
                 const msgsMap = {
                   auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
@@ -783,7 +783,7 @@ async function continueDualTurn() {
               if (event.code === "ollama_need_key") {
                 // 后端整体回滚本轮，移除全部新建气泡
                 removeNewBubbles();
-                showOllamaKeyCard(event.content, () => continueLastReply());
+                showOllamaKeyCard(event.content, () => continueLastReply(), event.key_target || "model1");
               } else {
                 // 非补 Key：保留已完成模型的气泡，移除失败模型未完成的气泡
                 bubbles.forEach((b) => {
@@ -850,7 +850,7 @@ async function continueDualTurn() {
 }
 
 /** 补填 Ollama Cloud Key 的内联卡片（保存后执行 onSaved 回调） */
-function showOllamaKeyCard(content, onSaved) {
+function showOllamaKeyCard(content, onSaved, target = "model1") {
   const container = document.getElementById("chat-messages");
   const card = document.createElement("div");
   card.className = "message error";
@@ -868,7 +868,7 @@ function showOllamaKeyCard(content, onSaved) {
     const key = document.getElementById("ollama-key-input")?.value.trim();
     if (!key) { showToast("请输入 API Key", "warning"); return; }
     try {
-      await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key });
+      await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key, target });
       card.remove();
       onSaved();
     } catch (e) {

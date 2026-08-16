@@ -107,7 +107,7 @@
             <li><strong>取消回复：</strong>回复中点击顶栏 ■ 可取消，已写入的消息会回滚并恢复到输入框</li>
             <li><strong>编辑标题：</strong>在侧栏点击标题或 ✏️ 按钮即可重命名存档</li>
             <li><strong>导出对话：</strong>侧栏「导出对话」可将整段对话导出为 Markdown</li>
-            <li><strong>全部接口统一为 OpenAI 兼容：</strong>全局禁用模型思考，回复直接输出最终内容</li>
+            <li><strong>思考模式：</strong>DeepSeek 模型可在创建存档时选择是否思考，思考内容不会展示；其他模型统一禁用思考</li>
           </ul>
         </section>
 
@@ -227,6 +227,13 @@
         </div>
         <p class="wizard-params-hint">调整 AI 生成参数，鼠标悬停可查看详细说明</p>
         <div class="params-grid" id="params-grid">
+          <div class="create-field thinking-option" id="thinking-option" style="display:none;grid-column:1/-1">
+            <label class="create-label">DeepSeek 思考模式</label>
+            <label class="pass-mode-option">
+              <input type="checkbox" id="param-thinking-enabled" checked />
+              <span>开启思考（不输出思考内容）</span>
+            </label>
+          </div>
           <div class="param-item">
             <label class="param-label" title="控制输出的随机性，值越高越有创意和变化">temperature</label>
             <div class="param-control">
@@ -366,6 +373,13 @@
         </div>
         <p class="wizard-params-hint">调整模型 2 的生成参数</p>
         <div class="params-grid" id="params-grid-m2">
+          <div class="create-field thinking-option" id="thinking-option-2" style="display:none;grid-column:1/-1">
+            <label class="create-label">DeepSeek 思考模式</label>
+            <label class="pass-mode-option">
+              <input type="checkbox" id="param2-thinking-enabled" checked />
+              <span>开启思考（不输出思考内容）</span>
+            </label>
+          </div>
           <div class="param-item">
             <label class="param-label" title="控制输出的随机性">temperature</label>
             <div class="param-control">

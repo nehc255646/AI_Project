@@ -378,13 +378,13 @@ class SlotManager:
             logger.error(f"touch_slot({index}) 失败: {e}")
             return False
 
-    def update_message_content(self, message_id: int, content: str) -> bool:
+    def update_message_content(self, slot_id: int, message_id: int, content: str) -> bool:
         try:
             with self._transaction() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
-                        "UPDATE messages SET content = %s WHERE id = %s",
-                        (content, message_id),
+                        "UPDATE messages SET content = %s WHERE id = %s AND slot_id = %s",
+                        (content, message_id, slot_id),
                     )
                     updated = cursor.rowcount > 0
             return updated

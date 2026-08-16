@@ -95,14 +95,24 @@ class AIClient:
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
 
-        # 全局禁用思考（按提供商配置的参数形式）
-        disable_thinking = PROVIDER_CONFIG.get(provider, {}).get("disable_thinking")
-        if disable_thinking:
-            for k, v in disable_thinking.items():
-                if k == "extra_body":
-                    kwargs.setdefault("extra_body", {}).update(v)
-                else:
-                    kwargs[k] = v
+        # DeepSeek 支持按存档选择思考模式，其他模型统一禁用思考
+        if "deepseek" in model_id.lower() or "deepseek" in model_key.lower():
+            thinking_enabled = (params or {}).get("thinking_enabled", True)
+            if provider == "dashscope":
+                kwargs.setdefault("extra_body", {}).update({"enable_thinking": thinking_enabled})
+            elif provider == "deepseek":
+                thinking_type = "enabled" if thinking_enabled else "disabled"
+                kwargs.setdefault("extra_body", {}).update({"thinking": {"type": thinking_type}})
+            else:
+                kwargs["reasoning_effort"] = "high" if thinking_enabled else "none"
+        else:
+            disable_thinking = PROVIDER_CONFIG.get(provider, {}).get("disable_thinking")
+            if disable_thinking:
+                for k, v in disable_thinking.items():
+                    if k == "extra_body":
+                        kwargs.setdefault("extra_body", {}).update(v)
+                    else:
+                        kwargs[k] = v
 
         # extra_body：仅部分提供商支持的非标准参数
         extra_body = {}

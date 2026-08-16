@@ -109,6 +109,7 @@ async def _stream_dual_turn(
     msg_ids = []
     rollback_start_id = None
     completed = False
+    failed_role = "model1"
 
     try:
         # 用户消息：仅普通发消息时落库并作为回滚起点
@@ -136,6 +137,7 @@ async def _stream_dual_turn(
                 continue
             if role == "model2" and not run_model2:
                 continue
+            failed_role = role
 
             is_current_first = (first_resp is None)  # 第一个跑的模型
 
@@ -260,7 +262,9 @@ async def _stream_dual_turn(
             if error_ref_key == "user_message_id"
             else (msg_ids[-1] if msg_ids else None)
         )
-        yield _sse(_exception_error_event(e, error_ref_key, ref_value))
+        event = _exception_error_event(e, error_ref_key, ref_value)
+        event["key_target"] = failed_role
+        yield _sse(event)
 
     finally:
         if not completed and rollback_start_id is not None:
@@ -504,7 +508,7 @@ async def continue_chat(slot_index: int):
             # 生成完成后合并回最后一条 assistant 消息
             if full_response and message_id:
                 get_slot_mgr().update_message_content(
-                    message_id, original_content + full_response
+                    slot_index, message_id, original_content + full_response
                 )
                 get_slot_mgr().touch_slot(slot_index)
 

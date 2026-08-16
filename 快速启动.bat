@@ -3,33 +3,33 @@ setlocal
 title AI Chat Agent
 cd /d "%~dp0"
 
-echo [1/3] Python ¼ì²éÖÐ...
+echo [1/3] Python ï¿½ï¿½ï¿½ï¿½ï¿½...
 set "PY=python"
 if exist "%~dp0backend\.venv\Scripts\python.exe" set "PY=%~dp0backend\.venv\Scripts\python.exe"
 "%PY%" --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [´íÎó] Î´ÕÒµ½¿ÉÓÃµÄ Python£¬Çë°²×° Python »òÔËÐÐ¡¸ÖØÖÃÆô¶¯.bat¡¹¡£
+    echo [ï¿½ï¿½ï¿½ï¿½] Î´ï¿½Òµï¿½ï¿½ï¿½ï¿½Ãµï¿½ Pythonï¿½ï¿½ï¿½ë°²×° Python ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½.batï¿½ï¿½ï¿½ï¿½
     pause
     exit /b 1
 )
-echo [1/3] Python ¾ÍÐ÷
+echo [1/3] Python ï¿½ï¿½ï¿½ï¿½
 
-echo [2/3] ¼ì²é 8000 ¶Ë¿Ú...
+echo [2/3] ï¿½ï¿½ï¿½ 8000 ï¿½Ë¿ï¿½...
 "%SystemRoot%\System32\netstat.exe" -ano | "%SystemRoot%\System32\findstr.exe" "LISTENING" | "%SystemRoot%\System32\findstr.exe" ":8000" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [ÌáÊ¾] ¶Ë¿Ú 8000 ÒÑÓÐ·þÎñÔÚÔËÐÐ£¬Ö±½Ó´ò¿ªä¯ÀÀÆ÷·ÃÎÊ¡£
+    echo [ï¿½ï¿½Ê¾] ï¿½Ë¿ï¿½ 8000 ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½Ö±ï¿½Ó´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¡ï¿½
     start http://localhost:8000
     echo.
     pause
     exit /b 0
 )
-echo [2/3] ¶Ë¿Ú¿ÕÏÐ
+echo [2/3] ï¿½Ë¿Ú¿ï¿½ï¿½ï¿½
 
-echo [3/3] Æô¶¯ºó¶Ë·þÎñ
+echo [3/3] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë·ï¿½ï¿½ï¿½
 cd /d "%~dp0backend"
 start "" /min cmd /c "%SystemRoot%\System32\timeout.exe /t 3 >nul & start http://localhost:8000"
-"%PY%" -m uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info
+"%PY%" -m uvicorn main:app --host 127.0.0.1 --port 8000 --log-level info
 echo.
-echo ·þÎñÒÑÍ£Ö¹£¬°´ÈÎÒâ¼ü¹Ø±Õ´°¿Ú
+echo ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í£Ö¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø±Õ´ï¿½ï¿½ï¿½
 pause >nul
 endlocal

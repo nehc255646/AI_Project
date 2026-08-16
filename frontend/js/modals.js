@@ -37,6 +37,7 @@ async function loadDefaultParams() {
 function getParamValues(suffix = "") {
   const el = (id) => document.getElementById(`param${suffix}-${id}`);
   return {
+    thinking_enabled: el("thinking-enabled")?.checked ?? true,
     temperature: parseFloat(el("temperature").value),
     top_p: parseFloat(el("top-p").value),
     min_p: parseFloat(el("min-p").value),
@@ -47,6 +48,15 @@ function getParamValues(suffix = "") {
     num_ctx: parseInt(el("num-ctx").value, 10),
     num_predict: parseInt(el("num-predict").value, 10),
   };
+}
+
+function updateThinkingOption(modelSelectId, optionId, checkboxId) {
+  const modelKey = document.getElementById(modelSelectId)?.value || "";
+  const visible = modelKey.toLowerCase().includes("deepseek");
+  const option = document.getElementById(optionId);
+  const checkbox = document.getElementById(checkboxId);
+  if (option) option.style.display = visible ? "block" : "none";
+  if (!visible && checkbox) checkbox.checked = false;
 }
 
 function showStep(step) {
@@ -209,6 +219,8 @@ export async function openCreateModal(index) {
   document.getElementById("create-system-prompt").value = "使用中文回答";
   document.getElementById("create-system-prompt-single").value = "使用中文回答";
   document.getElementById("create-system-prompt-2").value = "使用中文回答";
+  document.getElementById("param-thinking-enabled").checked = true;
+  document.getElementById("param2-thinking-enabled").checked = true;
 
   const params = await loadDefaultParams();
   // 模型1参数
@@ -241,6 +253,8 @@ export async function openCreateModal(index) {
   updateParamDisplays("2");
   updateApiKeyField();
   updateApiKeyField2();
+  updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
+  updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
 
   showStep(0);
   document.getElementById("create-modal").classList.remove("hidden");
@@ -571,13 +585,21 @@ export function initModalListeners() {
   document.getElementById("create-provider-select").addEventListener("change", () => {
     populateModelSelect("create-model-select");
     updateApiKeyField();
+    updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
   });
-  document.getElementById("create-model-select").addEventListener("change", updateApiKeyField);
+  document.getElementById("create-model-select").addEventListener("change", () => {
+    updateApiKeyField();
+    updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
+  });
   document.getElementById("create-provider2-select").addEventListener("change", () => {
     populateModelSelect("create-model2-select");
     updateApiKeyField2();
+    updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
   });
-  document.getElementById("create-model2-select").addEventListener("change", updateApiKeyField2);
+  document.getElementById("create-model2-select").addEventListener("change", () => {
+    updateApiKeyField2();
+    updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
+  });
 
   // 参数滑块联动
   const setupRangeListeners = (suffix = "") => {
