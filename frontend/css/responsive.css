@@ -65,6 +65,10 @@
     font-size: 12px;
   }
 
+  #import-backup-slot-btn {
+    right: 96px;
+  }
+
   #chat-messages {
     padding: 16px 14px;
     gap: 16px;

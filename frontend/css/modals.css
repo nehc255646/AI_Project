@@ -260,6 +260,10 @@
   backdrop-filter: blur(6px);
   box-shadow: 0 2px 12px rgba(139, 92, 246, 0.12);
 }
+
+#import-backup-slot-btn {
+  right: 118px;
+}
 .help-btn-top:hover {
   background: var(--accent-gradient);
   color: #fff;
