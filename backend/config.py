@@ -65,7 +65,7 @@ PROVIDER_CONFIG = {
     "opencode_zen": {
         "name": "opencode Zen 免费",
         "base_url": "https://opencode.ai/zen/v1",
-        "api_key_env": "OPENCODE_ZEN_API_KEY",
+        "api_key_env": "OPENCODE_API_KEY",
         "disable_thinking": {"reasoning_effort": "none"},
     },
 }
