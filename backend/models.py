@@ -66,6 +66,32 @@ class DualToggleRequest(BaseModel):
     first_model: Literal["model1", "model2"] = "model1"
 
 
+class UpdateDualModelConfig(BaseModel):
+    """双模型中模型2的部分更新 — 全部可选，用于区分“未传”与“清空”。"""
+    model: Optional[str] = Field(default=None, max_length=128)
+    system_prompt: Optional[str] = Field(default=None, max_length=100_000)
+    api_key: Optional[str] = Field(default=None, max_length=256)
+    params: Optional[GenerationParams] = None
+
+
+class UpdateSlotRequest(BaseModel):
+    """存档模型更换 — 所有字段可选，仅更新提供的字段。
+
+    双模型时 `model/system_prompt/api_key/params/model1_name` 对应模型1，
+    `model2` 嵌套对象对应模型2，两者完全独立互不覆盖；
+    单模型时忽略 `model2/model2_name/pass_mode`。
+    """
+    model: Optional[str] = Field(default=None, max_length=128)
+    system_prompt: Optional[str] = Field(default=None, max_length=100_000)
+    api_key: Optional[str] = Field(default=None, max_length=256)
+    title: Optional[str] = Field(default=None, max_length=128)
+    params: Optional[GenerationParams] = None
+    model1_name: Optional[str] = Field(default=None, max_length=20)
+    model2_name: Optional[str] = Field(default=None, max_length=20)
+    model2: Optional[UpdateDualModelConfig] = None
+    pass_mode: Optional[Literal["user", "assistant"]] = None
+
+
 class DeleteMessageRequest(BaseModel):
     """删除指定范围的消息。
 

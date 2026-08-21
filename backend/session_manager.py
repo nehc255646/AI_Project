@@ -474,3 +474,50 @@ class SlotManager:
         except pymysql.Error as e:
             logger.error(f"update_dual_config({index}) 失败: {e}")
             return False
+
+    def update_slot(self, index: int, model: str | None = None,
+                    system_prompt: str | None = None, api_key: str | None = None,
+                    title: str | None = None, params: dict | None = None,
+                    dual_config: dict | None = None) -> bool:
+        """原子更新存档配置（仅更新非 None 字段），用于模型更换。
+
+        - model/system_prompt/api_key/title/params 对应 slots 表直属列
+        - dual_config 为完整 JSON 字典（调用方需自行合并好再传入）
+        """
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM slots WHERE id = %s", (index,))
+                    if not cursor.fetchone():
+                        return False
+                    set_parts = []
+                    values = []
+                    if model is not None:
+                        set_parts.append("model = %s")
+                        values.append(model)
+                    if system_prompt is not None:
+                        set_parts.append("system_prompt = %s")
+                        values.append(system_prompt)
+                    if api_key is not None:
+                        set_parts.append("api_key = %s")
+                        values.append(api_key)
+                    if title is not None:
+                        set_parts.append("title = %s")
+                        values.append(title)
+                    if params is not None:
+                        set_parts.append("params = %s")
+                        values.append(json.dumps(params))
+                    if dual_config is not None:
+                        set_parts.append("dual_config = %s")
+                        values.append(json.dumps(dual_config))
+                    if not set_parts:
+                        return False
+                    set_parts.append("updated_at = %s")
+                    values.append(self._now())
+                    values.append(index)
+                    sql = f"UPDATE slots SET {', '.join(set_parts)} WHERE id = %s"
+                    cursor.execute(sql, values)
+            return True
+        except pymysql.Error as e:
+            logger.error(f"update_slot({index}) 失败: {e}")
+            return False

@@ -20,7 +20,7 @@ import {
 } from "./ui.js";
 
 // ── 弹窗 ──
-import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal, exportSlotBackup, importSlotBackup } from "./modals.js";
+import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal, exportSlotBackup, importSlotBackup, openEditModal } from "./modals.js";
 
 // ── 对话 ──
 import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode, continueLastReply } from "./chat.js";
@@ -78,6 +78,8 @@ function setupEventListeners() {
   $("#back-to-slots-btn").addEventListener("click", backToSlots);
   $("#back-to-slots-header-btn").addEventListener("click", backToSlots);
   $("#clear-slot-chat-btn").addEventListener("click", clearSlotChat);
+  // 更换模型（侧边栏）
+  document.getElementById("change-model-btn")?.addEventListener("click", openEditModal);
 
   // 导出
   $("#export-chat-btn").addEventListener("click", openExportModal);

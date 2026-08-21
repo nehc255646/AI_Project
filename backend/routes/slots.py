@@ -17,6 +17,7 @@ from models import (
     SlotDetail,
     ExportData,
     ImportSlotRequest,
+    UpdateSlotRequest,
 )
 from helpers import error, resolve_slot, check_api_key, validate_model_key
 from state import get_slot_mgr
@@ -250,6 +251,171 @@ def toggle_dual_mode(slot_index: int, req: DualToggleRequest):
     if not get_slot_mgr().update_dual_config(slot_index, dual_config):
         error("update_failed", "回复模式更新失败", 500)
     return {"ok": True, "dual_config": dual_config}
+
+
+@router.patch("/api/slots/{slot_index}/config")
+def update_slot_config(slot_index: int, req: UpdateSlotRequest):
+    """模型更换 — 原子更新存档的模型/提示词/参数/密钥等配置（不影响历史消息）。
+
+    单模型与双模型的两个模型完全独立：
+    - 顶层字段 `model/system_prompt/api_key/params/model1_name` 仅作用于模型1（单模型即唯一模型）
+    - `model2` 嵌套对象仅作用于模型2，切勿交叉覆盖
+    """
+    import copy
+    import json as _json
+
+    data = resolve_slot(slot_index)
+    mgr = get_slot_mgr()
+    dual_raw = data.get("dual_config", {}) or {}
+    is_dual = dual_raw.get("enabled", False)
+
+    # 校验是否有任何更新
+    has_update = any(
+        v is not None for v in [
+            req.model, req.system_prompt, req.api_key, req.title,
+            req.params, req.model1_name, req.model2_name, req.model2, req.pass_mode,
+        ]
+    )
+    if not has_update:
+        error("no_update", "未提供任何可更新的字段", 400)
+
+    # 单模型存档禁止更新双模型专属字段
+    if not is_dual and any(v is not None for v in [req.model2, req.model2_name, req.pass_mode]):
+        # model2 相关字段仅在双模型下有效
+        if req.model2 is not None or req.model2_name is not None or req.pass_mode is not None:
+            error("not_dual_mode", "该存档不是双模型模式，无法更新模型2", 400)
+    if not is_dual and req.model1_name is not None:
+        # 单模型下 model1_name 无意义，视为忽略但提示
+        error("not_dual_mode", "该存档不是双模型模式，无法更新模型名称", 400)
+
+    # 预备更新值（None 表示不更新）
+    new_model = None
+    new_prompt = None
+    new_api_key = None
+    new_title = None
+    new_params = None
+    new_dual = None
+
+    # ——— 标题 ———
+    if req.title is not None:
+        cleaned = req.title.strip()
+        if not cleaned:
+            error("empty_title", "标题不能为空", 400)
+        new_title = cleaned
+
+    # ——— 模型1（或单模型） ———
+    # model
+    if req.model is not None:
+        cfg = validate_model_key(req.model)
+        # 密钥有效性：若请求同时带了 api_key 则用新的，否则用存档旧的
+        effective_key = req.api_key if req.api_key is not None else data.get("api_key", "")
+        # check_api_key 内部会优先检查环境变量
+        check_api_key(cfg["provider"], effective_key if effective_key is not None else "")
+        new_model = req.model
+
+    # api_key（仅在未随 model 一起校验时需要单独校验）
+    if req.api_key is not None:
+        # 去空白
+        provided_key = req.api_key.strip() if isinstance(req.api_key, str) else ""
+        if req.model is None:
+            # 未更换模型，仅更换密钥：用现有模型校验
+            cur_model = data.get("model", "")
+            if cur_model:
+                cfg_cur = validate_model_key(cur_model)
+                check_api_key(cfg_cur["provider"], provided_key)
+            # 若存档无模型（异常情况），则跳过校验，直接存储
+        new_api_key = provided_key
+
+    # system_prompt
+    if req.system_prompt is not None:
+        # 允许空字符串，但需通过 Pydantic 长度校验（已在模型层完成）
+        new_prompt = req.system_prompt
+
+    # params
+    if req.params is not None:
+        new_params = req.params.model_dump()
+
+    # ——— 双模型独立处理 ———
+    if is_dual:
+        # 深拷贝，避免直接修改原始对象
+        new_dual = copy.deepcopy(dual_raw)
+        # 确保 model2 结构存在
+        if "model2" not in new_dual or not isinstance(new_dual["model2"], dict):
+            new_dual["model2"] = {}
+        # 保证 params 为 dict
+        if "params" not in new_dual["model2"] or not isinstance(new_dual["model2"]["params"], dict):
+            new_dual["model2"]["params"] = {}
+
+        # model1_name / model2_name / pass_mode 彼此独立
+        if req.model1_name is not None:
+            cleaned = req.model1_name.strip()
+            # 允许空字符串（回退显示为 1号/2号），但限制长度已由 Pydantic 保证
+            new_dual["model1_name"] = cleaned
+        if req.model2_name is not None:
+            cleaned = req.model2_name.strip()
+            new_dual["model2_name"] = cleaned
+        if req.pass_mode is not None:
+            if req.pass_mode not in ("user", "assistant"):
+                error("invalid_pass_mode", "传入模式无效", 400)
+            new_dual["pass_mode"] = req.pass_mode
+
+        # model2 嵌套独立更新
+        if req.model2 is not None:
+            m2 = req.model2
+            existing_m2 = dual_raw.get("model2") or {}
+            # model
+            if m2.model is not None:
+                cfg2 = validate_model_key(m2.model)
+                effective_m2_key = m2.api_key if m2.api_key is not None else existing_m2.get("api_key", "")
+                check_api_key(cfg2["provider"], effective_m2_key if effective_m2_key is not None else "")
+                new_dual["model2"]["model"] = m2.model
+            # system_prompt
+            if m2.system_prompt is not None:
+                new_dual["model2"]["system_prompt"] = m2.system_prompt
+            # api_key
+            if m2.api_key is not None:
+                provided_m2_key = m2.api_key.strip() if isinstance(m2.api_key, str) else ""
+                if m2.model is None:
+                    # 未同时更换模型，仅换密钥：用现有模型校验
+                    cur_m2_model = existing_m2.get("model", "")
+                    if cur_m2_model:
+                        cfg2_cur = validate_model_key(cur_m2_model)
+                        check_api_key(cfg2_cur["provider"], provided_m2_key)
+                new_dual["model2"]["api_key"] = provided_m2_key
+            # params
+            if m2.params is not None:
+                new_dual["model2"]["params"] = m2.params.model_dump()
+    else:
+        # 单模型：若误传了 dual 相关字段（前面已拦截 model2 相关），此处保持 new_dual 为 None（不更新）
+        pass
+
+    # 执行原子更新
+    success = mgr.update_slot(
+        slot_index,
+        model=new_model,
+        system_prompt=new_prompt,
+        api_key=new_api_key,
+        title=new_title,
+        params=new_params,
+        dual_config=new_dual,
+    )
+    if not success:
+        error("update_failed", "更新存档配置失败", 500)
+
+    # 返回最新配置供前端同步
+    fresh = mgr.get_slot(slot_index)
+    if fresh is None:
+        error("slot_not_found", "存档不存在", 404)
+    fresh_dual = fresh.get("dual_config", {}) or {}
+    return {
+        "ok": True,
+        "model": fresh.get("model", ""),
+        "system_prompt": fresh.get("system_prompt", ""),
+        "title": fresh.get("title", ""),
+        "params": fresh.get("params", {}) or {},
+        "dual_config": fresh_dual,
+        "dual_enabled": fresh_dual.get("enabled", False),
+    }
 
 
 @router.get("/api/slots/{slot_index}/chat/export")
