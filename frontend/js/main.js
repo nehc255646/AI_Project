@@ -54,6 +54,9 @@ async function loadModels() {
       { key: "openai:gpt-5.6-luna", id: "gpt-5.6-luna", provider: "openai" },
       { key: "gemini:gemini-3.7-flash", id: "gemini-3.7-flash", provider: "gemini" },
       { key: "opencode:glm-5.3", id: "glm-5.3", provider: "opencode" },
+      { key: "opencode_zen:x-preview-f-free", id: "x-preview-f-free", provider: "opencode_zen" },
+      { key: "opencode_zen:mimo-v2.5-free", id: "mimo-v2.5-free", provider: "opencode_zen" },
+      { key: "opencode_zen:muse-spark-1.2-contributor-free", id: "muse-spark-1.2-contributor-free", provider: "opencode_zen" },
     ];
   }
   updateApiKeyField(); // 使用当前选中的模型更新 API Key 字段

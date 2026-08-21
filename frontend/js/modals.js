@@ -159,10 +159,11 @@ const PROVIDER_META = {
   openai: { label: "OpenAI 官方" },
   gemini: { label: "Gemini 官方" },
   opencode: { label: "opencode go 订阅" },
+  opencode_zen: { label: "opencode Zen 免费" },
 };
 const PROVIDER_ORDER = [
   "deepseek", "dashscope", "ollama_cloud", "ollama_local",
-  "openai", "gemini", "opencode",
+  "openai", "gemini", "opencode", "opencode_zen",
 ];
 
 function providerSelectIdFor(modelSelectId) {

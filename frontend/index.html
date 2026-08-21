@@ -52,7 +52,7 @@
           <h3 class="help-section-title">📖 快速开始</h3>
           <ol class="help-list">
             <li>在主页点击「<strong>+ 空存档</strong>」，选择「单模型」或「双模型 Role-Play」</li>
-            <li><strong>先选提供商，再选模型：</strong>提供商下拉列出 DeepSeek / 阿里云百炼 / Ollama / OpenAI / Gemini / opencode go，选定后模型下拉只显示该提供商下的模型</li>
+            <li><strong>先选提供商，再选模型：</strong>提供商下拉列出 DeepSeek / 阿里云百炼 / Ollama / OpenAI / Gemini / opencode go / opencode Zen 免费，选定后模型下拉只显示该提供商下的模型</li>
             <li>需要密钥的提供商：已配置环境变量则自动识别；否则会显示密钥输入框，密钥仅与该存档绑定</li>
             <li><strong>单模型：</strong>调整参数 → 设置系统提示词与标题 → 即可开始对话</li>
             <li><strong>双模型：</strong>分别配置两个模型（角色名、提供商、模型、参数、提示词），两个模型会依次回答，适合角色扮演</li>
@@ -91,6 +91,10 @@
             <div class="help-model-item">
               <div class="help-model-name">opencode go 订阅</div>
               <div class="help-model-desc">glm-5.3 / glm-5.2、kimi-k3 / kimi-k2.6、deepseek-v4 系列、mimo-v2.5 系列、hy3<br>环境变量 <code>OPENCODE_API_KEY</code>（在 opencode.ai 订阅后获取）</div>
+            </div>
+            <div class="help-model-item">
+              <div class="help-model-name">opencode Zen 免费 <span class="help-model-badge" style="background:#10b981">FREE</span></div>
+              <div class="help-model-desc">x-preview-f-free（Ox Alpha Free）、mimo-v2.5-free、hy3-free、nemotron-3-ultra-free、nemotron-3.5-lightning-free、muse-spark-1.2-contributor-free<br>环境变量 <code>OPENCODE_ZEN_API_KEY</code>（免费额度，兼容 OpenAI 接口 `https://opencode.ai/zen/v1/` /chat/completions）<br>未配置时可回退使用 <code>OPENCODE_API_KEY</code></div>
             </div>
           </div>
           <p class="create-hint" style="margin-top:10px">各提供商下可用的全部模型以创建向导的模型下拉框为准。</p>

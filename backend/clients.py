@@ -72,6 +72,11 @@ class AIClient:
         env_val = os.environ.get(env_name) if env_name else ""
         if env_val:
             return env_val
+        # opencode_zen 兼容回退到 opencode 的 Key（同一账号体系）
+        if provider == "opencode_zen":
+            fallback = os.environ.get("OPENCODE_API_KEY", "")
+            if fallback:
+                return fallback
         raise ValueError(f"{cfg.get('name', provider)} API Key 未配置，请在创建存档时提供")
 
     # ── 对外入口：流式对话 ──

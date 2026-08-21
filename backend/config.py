@@ -62,6 +62,12 @@ PROVIDER_CONFIG = {
         "api_key_env": "OPENCODE_API_KEY",
         "disable_thinking": {"reasoning_effort": "none"},
     },
+    "opencode_zen": {
+        "name": "opencode Zen 免费",
+        "base_url": "https://opencode.ai/zen/v1",
+        "api_key_env": "OPENCODE_ZEN_API_KEY",
+        "disable_thinking": {"reasoning_effort": "none"},
+    },
 }
 
 # 提供商展示顺序（前端提供商下拉的排序依据）
@@ -73,6 +79,7 @@ PROVIDER_ORDER = [
     "openai",
     "gemini",
     "opencode",
+    "opencode_zen",
 ]
 
 # CORS 允许来源（逗号分隔，可通过 ALLOWED_ORIGINS 环境变量覆盖）
@@ -167,4 +174,11 @@ MODEL_CONFIG = {
     "opencode:mimo-v2.5-pro": {"provider": "opencode", "id": "mimo-v2.5-pro", "max_tokens": 8192},
     "opencode:mimo-v2.5": {"provider": "opencode", "id": "mimo-v2.5", "max_tokens": 8192},
     "opencode:hy3": {"provider": "opencode", "id": "hy3", "max_tokens": 8192},
+    # opencode Zen 免费（OpenAI 兼容，base_url: https://opencode.ai/zen/v1/）
+    "opencode_zen:x-preview-f-free": {"provider": "opencode_zen", "id": "x-preview-f-free", "max_tokens": 8192},
+    "opencode_zen:mimo-v2.5-free": {"provider": "opencode_zen", "id": "mimo-v2.5-free", "max_tokens": 8192},
+    "opencode_zen:hy3-free": {"provider": "opencode_zen", "id": "hy3-free", "max_tokens": 8192},
+    "opencode_zen:nemotron-3-ultra-free": {"provider": "opencode_zen", "id": "nemotron-3-ultra-free", "max_tokens": 8192},
+    "opencode_zen:nemotron-3.5-lightning-free": {"provider": "opencode_zen", "id": "nemotron-3.5-lightning-free", "max_tokens": 8192},
+    "opencode_zen:muse-spark-1.2-contributor-free": {"provider": "opencode_zen", "id": "muse-spark-1.2-contributor-free", "max_tokens": 8192},
 }
