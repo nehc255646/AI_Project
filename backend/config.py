@@ -94,6 +94,11 @@ ALLOWED_ORIGINS = (
 CONTEXT_WINDOW_SIZE = 100   # 每次传给 AI 模型的消息数（上下文窗口）
 SLOT_COUNT = 10
 
+# ── 自定义背景图 ──
+BACKGROUNDS_DIR = BASE_DIR / "backgrounds"
+BACKGROUND_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+BACKGROUND_MAX_SIZE = 10 * 1024 * 1024  # 10MB
+
 # MySQL 配置（密码必须通过环境变量设置，不提供默认值）
 MYSQL_HOST = os.environ.get("MYSQL_HOST", "localhost")
 _mysql_port_raw = os.environ.get("MYSQL_PORT", "3306")

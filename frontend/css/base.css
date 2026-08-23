@@ -22,6 +22,30 @@ body {
   line-height: 1.7;
 }
 
+/* ── 自定义背景图 ──
+   位于 body 背景之上、装饰层与应用内容之下；
+   模糊通过放大 + filter 规避边缘透明光晕 */
+#bg-layer {
+  position: fixed;
+  inset: -28px;
+  z-index: -1;
+  display: none;
+  background-image: var(--bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(var(--bg-blur, 0px));
+}
+#bg-layer.active { display: block; }
+
+/* 遮罩层 — 用不透明度控制背景图的"透出程度" */
+#bg-layer .bg-dim {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-deepest);
+  opacity: var(--bg-dim, 0);
+}
+
 /* ── 动态背景光晕 ── */
 body::before {
   content: "";

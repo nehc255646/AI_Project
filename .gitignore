@@ -22,6 +22,10 @@ backend/server.log
 # 会话数据
 backend/sessions/
 
+# 自定义背景图（用户本地资源）
+backend/backgrounds/*
+!backend/backgrounds/.gitkeep
+
 # IDE
 .vscode/
 .idea/

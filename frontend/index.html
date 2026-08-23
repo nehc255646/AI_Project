@@ -33,6 +33,9 @@
   <!-- CSS is imported via JS (Vite handles bundling) -->
 </head>
 <body>
+  <!-- Custom background image layer (user-uploaded, below decorative layers) -->
+  <div id="bg-layer" aria-hidden="true"><div class="bg-dim"></div></div>
+
   <!-- Decorative background layers (CSS-driven particles, blobs, texture) -->
   <div id="star-field" aria-hidden="true"></div>
   <div id="decorative-blobs" aria-hidden="true">
@@ -705,6 +708,33 @@
         <button class="help-close-btn" id="theme-close-btn" title="关闭">✕</button>
       </div>
       <div class="theme-list" id="theme-list"></div>
+      <div class="bg-section">
+        <div class="bg-section-header">
+          <span class="bg-section-title">🖼️ 自定义背景</span>
+          <label class="bg-enable-switch" title="启用/停用背景图">
+            <input type="checkbox" id="bg-enable-toggle">
+            <span class="bg-switch-slider"></span>
+          </label>
+        </div>
+        <div class="bg-actions">
+          <button id="bg-upload-btn" class="bg-upload-btn" type="button">📤 上传图片（或拖拽到此处）</button>
+          <input type="file" id="bg-upload-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+        </div>
+        <div class="bg-gallery" id="bg-gallery"></div>
+        <div class="bg-controls">
+          <div class="bg-control-row">
+            <span class="bg-control-label">透明度</span>
+            <input type="range" id="bg-opacity-slider" min="0" max="100" step="1" value="35">
+            <span class="bg-control-value" id="bg-opacity-value">35%</span>
+          </div>
+          <div class="bg-control-row">
+            <span class="bg-control-label">模糊度</span>
+            <input type="range" id="bg-blur-slider" min="0" max="20" step="1" value="0">
+            <span class="bg-control-value" id="bg-blur-value">0px</span>
+          </div>
+        </div>
+        <button id="bg-clear-btn" class="bg-clear-btn" type="button">清除背景设置</button>
+      </div>
     </div>
   </div>
 

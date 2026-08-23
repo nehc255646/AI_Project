@@ -34,10 +34,14 @@ import { showToast } from "./toast.js";
 // ── 主题 ──
 import { initTheme, openThemeModal, closeThemeModal } from "./theme.js";
 
+// ── 自定义背景 ──
+import { initBackground, refreshBackgroundPanel } from "./background.js";
+
 // ── 初始化 ──
 
 async function init() {
   initTheme();
+  initBackground();
   await loadModels();
   await loadEnvStatus();
   await loadSlots();
@@ -105,8 +109,12 @@ function setupEventListeners() {
   $("#help-got-it").addEventListener("click", closeHelpModal);
 
   // 主题（宫格页与聊天页右上角按钮 + 弹层关闭）
-  $("#theme-btn-slot").addEventListener("click", openThemeModal);
-  $("#theme-btn-chat").addEventListener("click", openThemeModal);
+  const openThemeWithBg = () => {
+    openThemeModal();
+    refreshBackgroundPanel(); // 每次打开刷新背景画廊与控件状态
+  };
+  $("#theme-btn-slot").addEventListener("click", openThemeWithBg);
+  $("#theme-btn-chat").addEventListener("click", openThemeWithBg);
   $("#theme-close-btn").addEventListener("click", closeThemeModal);
   $("#theme-modal").addEventListener("click", (e) => {
     if (e.target.id === "theme-modal") closeThemeModal();

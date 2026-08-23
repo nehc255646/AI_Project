@@ -14,13 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import FRONTEND_DIR, ALLOWED_ORIGINS
+from config import FRONTEND_DIR, ALLOWED_ORIGINS, BACKGROUNDS_DIR
 from clients import AIClient
 from session_manager import SlotManager
 from state import init as init_state
 from routes.slots import router as slots_router
 from routes.chat import router as chat_router
 from routes.models import router as models_router
+from routes.backgrounds import router as backgrounds_router
 
 # ── Logging ──
 
@@ -75,6 +76,15 @@ app.add_middleware(
 app.include_router(slots_router)
 app.include_router(chat_router)
 app.include_router(models_router)
+app.include_router(backgrounds_router)
+
+# ── Serve background images ──
+# 静态挂载需在 / 前端挂载之前注册（/ 为兜底路由）
+if BACKGROUNDS_DIR.is_dir():
+    app.mount("/backgrounds", StaticFiles(directory=str(BACKGROUNDS_DIR)), name="backgrounds")
+    logger.info(f"已挂载背景图目录: {BACKGROUNDS_DIR}")
+else:
+    logger.warning(f"背景图目录不存在: {BACKGROUNDS_DIR}")
 
 
 # ── 全局异常处理器（返回结构化错误） ──
