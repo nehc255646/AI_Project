@@ -30,8 +30,8 @@
   height: 1px;
   background: linear-gradient(
     90deg, transparent,
-    rgba(139, 92, 246, 0.15),
-    rgba(59, 130, 246, 0.15),
+    rgba(var(--accent-rgb), 0.15),
+    rgba(var(--accent-3-rgb), 0.15),
     transparent
   );
   pointer-events: none;
@@ -75,10 +75,10 @@
   font-size: 12px;
   font-weight: 600;
   padding: 4px 14px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.15));
-  color: #a78bfa;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.15), rgba(var(--accent-3-rgb), 0.15));
+  color: var(--accent-text);
   border-radius: var(--radius-full);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   white-space: nowrap;
 }
 
@@ -86,7 +86,7 @@
   font-size: 11px;
   font-weight: 500;
   padding: 3px 12px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1));
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.1), rgba(var(--accent-3-rgb), 0.1));
   color: var(--text-secondary);
   border-radius: var(--radius-full);
   border: 1px solid var(--glass-border);
@@ -111,7 +111,7 @@
   font-weight: 600;
   padding: 4px 14px;
   background: rgba(239, 68, 68, 0.12);
-  color: #fca5a5;
+  color: var(--error-text);
   border-radius: var(--radius-full);
   border: 1px solid rgba(239, 68, 68, 0.2);
   animation: streaming-pulse 1.2s ease-in-out infinite;
@@ -197,7 +197,7 @@
 .message.user .avatar {
   background: var(--accent-gradient);
   color: #fff;
-  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.35);
 }
 .message.assistant .avatar {
   background: linear-gradient(135deg, #1a2332, #1e293b);
@@ -252,14 +252,14 @@
 
 /* ── 流式发光 ── */
 .message.assistant .bubble.streaming {
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.08), inset 0 0 20px rgba(139, 92, 246, 0.02);
-  border-color: rgba(139, 92, 246, 0.12);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.08), inset 0 0 20px rgba(var(--accent-rgb), 0.02);
+  border-color: rgba(var(--accent-rgb), 0.12);
   background: linear-gradient(
     110deg,
-    rgba(139, 92, 246, 0.03) 0%,
-    rgba(59, 130, 246, 0.06) 25%,
-    rgba(6, 182, 212, 0.03) 50%,
-    rgba(139, 92, 246, 0.03) 100%
+    rgba(var(--accent-rgb), 0.03) 0%,
+    rgba(var(--accent-3-rgb), 0.06) 25%,
+    rgba(var(--accent-4-rgb), 0.03) 50%,
+    rgba(var(--accent-rgb), 0.03) 100%
   );
   background-size: 200% 100%;
   animation: shimmer-slide 3s ease-in-out infinite;
@@ -330,8 +330,8 @@
   box-sizing: border-box;
 }
 .edit-textarea:focus {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
 }
 
 .edit-actions {
@@ -364,7 +364,7 @@
   border: none;
 }
 .edit-save-btn:hover {
-  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.35);
 }
 
 /* ── Markdown 渲染 ── */
@@ -388,10 +388,10 @@
 .bubble code {
   font-family: var(--font-mono);
   font-size: 13px;
-  background: rgba(139, 92, 246, 0.1);
+  background: var(--code-inline-bg);
   padding: 2px 7px;
   border-radius: 4px;
-  color: #c4b5fd;
+  color: var(--accent-text-strong);
 }
 
 .code-header {
@@ -448,7 +448,7 @@
   text-align: left;
 }
 .bubble th {
-  background: rgba(139, 92, 246, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
   font-weight: 600;
 }
 
@@ -470,12 +470,12 @@
 
 /* 链接 */
 .bubble a {
-  color: #a78bfa;
+  color: var(--link-color);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: border-color var(--transition-fast);
 }
-.bubble a:hover { border-bottom-color: #a78bfa; }
+.bubble a:hover { border-bottom-color: var(--link-color); }
 
 /* 标题 */
 .bubble h1, .bubble h2, .bubble h3, .bubble h4 {
@@ -531,7 +531,7 @@
 }
 .message.error .bubble .retry-btn:hover {
   transform: scale(1.04);
-  box-shadow: 0 2px 14px rgba(139, 92, 246, 0.45);
+  box-shadow: 0 2px 14px rgba(var(--accent-rgb), 0.45);
 }
 .message.error .bubble .retry-btn:active {
   transform: scale(0.95);
@@ -541,10 +541,10 @@
 .model-label-bar {
   font-size: 11px;
   font-weight: 700;
-  color: #a78bfa;
+  color: var(--accent-text);
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.15);
   letter-spacing: 0.03em;
   display: flex;
   align-items: center;
@@ -552,7 +552,7 @@
 }
 
 .message.assistant .model-label-bar {
-  color: #93c5fd;
+  color: var(--link-color);
 }
 .message.assistant:has(.model-label-bar) .avatar {
   display: none; /* 双模型时隐藏默认头像，以 label 中的图标为准 */
@@ -605,8 +605,8 @@
 }
 
 .response-mode-option input[type="radio"]:checked + .response-mode-content {
-  border-color: rgba(139, 92, 246, 0.4);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--text-primary);
 }
 
@@ -666,8 +666,8 @@
 }
 
 .first-model-option input[type="radio"]:checked + span {
-  border-color: rgba(139, 92, 246, 0.4);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--text-primary);
 }
 
@@ -696,8 +696,8 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .input-wrapper:focus-within {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1), 0 0 24px rgba(139, 92, 246, 0.06);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1), 0 0 24px rgba(var(--accent-rgb), 0.06);
 }
 
 #message-input {
@@ -759,7 +759,7 @@
 }
 .send-btn:hover:not(:disabled) {
   transform: scale(1.06);
-  box-shadow: 0 2px 20px rgba(139, 92, 246, 0.5);
+  box-shadow: 0 2px 20px rgba(var(--accent-rgb), 0.5);
 }
 .send-btn:active:not(:disabled) {
   transform: scale(0.92);

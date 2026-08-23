@@ -69,6 +69,10 @@
     right: 96px;
   }
 
+  #theme-btn-slot {
+    right: 208px;
+  }
+
   #chat-messages {
     padding: 16px 14px;
     gap: 16px;

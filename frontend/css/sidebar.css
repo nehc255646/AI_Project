@@ -75,12 +75,12 @@
 .slot-id-badge {
   display: inline-block;
   padding: 8px 18px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.15));
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.15), rgba(var(--accent-3-rgb), 0.15));
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: var(--radius-md);
   font-size: 15px;
   font-weight: 600;
-  color: #a78bfa;
+  color: var(--accent-text);
 }
 
 .model-display {
@@ -121,7 +121,7 @@
   transition: border-color var(--transition-fast);
 }
 .title-display:hover {
-  border-color: rgba(139, 92, 246, 0.3);
+  border-color: rgba(var(--accent-rgb), 0.3);
 }
 .title-text {
   flex: 1;
@@ -158,7 +158,7 @@
   width: 100%;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(139, 92, 246, 0.4);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 14px;
@@ -168,8 +168,8 @@
   box-sizing: border-box;
 }
 .title-input:focus {
-  border-color: rgba(139, 92, 246, 0.7);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.7);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.15);
 }
 .title-edit-actions {
   display: flex;

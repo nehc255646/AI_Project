@@ -122,7 +122,7 @@
 .blob-1 {
   width: 700px;
   height: 700px;
-  background: radial-gradient(circle, #8b5cf6, transparent 65%);
+  background: radial-gradient(circle, var(--accent-1), transparent 65%);
   top: -250px;
   right: -200px;
   animation-delay: 0s;
@@ -132,7 +132,7 @@
 .blob-2 {
   width: 550px;
   height: 550px;
-  background: radial-gradient(circle, #3b82f6, transparent 65%);
+  background: radial-gradient(circle, var(--accent-3), transparent 65%);
   bottom: -200px;
   left: -150px;
   animation-delay: -10s;
@@ -142,7 +142,7 @@
 .blob-3 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, #06b6d4, transparent 65%);
+  background: radial-gradient(circle, var(--accent-4), transparent 65%);
   top: 50%;
   left: 55%;
   animation-delay: -16s;
@@ -213,7 +213,7 @@
   left: 30%;
   right: 30%;
   height: 1.5px;
-  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.4), rgba(59, 130, 246, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.4), rgba(var(--accent-3-rgb), 0.4), transparent);
   border-radius: 2px;
   opacity: 0;
   transition: opacity var(--transition-normal);
@@ -315,8 +315,8 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .message.assistant:hover .bubble {
-  border-color: rgba(139, 92, 246, 0.15);
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.06), var(--ai-msg-shadow);
+  border-color: rgba(var(--accent-rgb), 0.15);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.06), var(--ai-msg-shadow);
 }
 
 /* ── 9. 头像增强 ── */
@@ -332,8 +332,8 @@
   transition: all var(--transition-fast);
 }
 .message.assistant:hover .avatar {
-  border-color: rgba(139, 92, 246, 0.35);
-  box-shadow: 0 0 16px rgba(139, 92, 246, 0.15);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.15);
 }
 
 /* ── 10. 流式打字指示器 ── */
@@ -354,20 +354,20 @@
 @keyframes typing-dots {
   0%, 60%, 100% {
     box-shadow:
-      7px 0 0 rgba(139, 92, 246, 0.2),
-      14px 0 0 rgba(139, 92, 246, 0.2);
+      7px 0 0 rgba(var(--accent-rgb), 0.2),
+      14px 0 0 rgba(var(--accent-rgb), 0.2);
     transform: translateY(0);
   }
   20% {
     box-shadow:
-      7px 0 0 rgba(139, 92, 246, 0.9),
-      14px 0 0 rgba(139, 92, 246, 0.2);
+      7px 0 0 rgba(var(--accent-rgb), 0.9),
+      14px 0 0 rgba(var(--accent-rgb), 0.2);
     transform: translateY(-2px);
   }
   40% {
     box-shadow:
-      7px 0 0 rgba(139, 92, 246, 0.2),
-      14px 0 0 rgba(139, 92, 246, 0.9);
+      7px 0 0 rgba(var(--accent-rgb), 0.2),
+      14px 0 0 rgba(var(--accent-rgb), 0.9);
     transform: translateY(-2px);
   }
 }
@@ -397,7 +397,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+  background: radial-gradient(circle at center, rgba(var(--accent-rgb), 0.12) 0%, transparent 70%);
   opacity: 0;
   transition: opacity var(--transition-fast);
   border-radius: inherit;
@@ -423,10 +423,10 @@
   position: relative;
 }
 .input-wrapper:focus-within {
-  border-color: rgba(139, 92, 246, 0.5) !important;
+  border-color: rgba(var(--accent-rgb), 0.5) !important;
   box-shadow:
-    0 0 0 3px rgba(139, 92, 246, 0.1),
-    0 0 24px rgba(139, 92, 246, 0.08) !important;
+    0 0 0 3px rgba(var(--accent-rgb), 0.1),
+    0 0 24px rgba(var(--accent-rgb), 0.08) !important;
 }
 
 /* 输入区域顶部渐变分割线 */
@@ -440,9 +440,9 @@
   height: 1px;
   background: linear-gradient(
     90deg, transparent,
-    rgba(139, 92, 246, 0.25),
-    rgba(59, 130, 246, 0.25),
-    rgba(6, 182, 212, 0.15),
+    rgba(var(--accent-rgb), 0.25),
+    rgba(var(--accent-3-rgb), 0.25),
+    rgba(var(--accent-4-rgb), 0.15),
     transparent
   );
   pointer-events: none;
@@ -453,8 +453,8 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .bubble pre:hover {
-  border-color: rgba(139, 92, 246, 0.15);
-  box-shadow: 0 0 16px rgba(139, 92, 246, 0.04);
+  border-color: rgba(var(--accent-rgb), 0.15);
+  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.04);
 }
 .code-header { transition: background var(--transition-fast); }
 .bubble pre:hover .code-header { background: rgba(255, 255, 255, 0.05); }
@@ -467,7 +467,7 @@
   content: "";
   position: absolute; inset: 0;
   border-radius: inherit;
-  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle at center, rgba(var(--accent-rgb), 0.15) 0%, transparent 70%);
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -490,7 +490,7 @@
 }
 @keyframes header-icon-float {
   0%, 100% { transform: translateY(0); box-shadow: var(--accent-glow); }
-  50% { transform: translateY(-8px); box-shadow: 0 0 40px rgba(139, 92, 246, 0.45); }
+  50% { transform: translateY(-8px); box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.45); }
 }
 
 /* ── 16. Toast 增强 ── */
@@ -539,7 +539,7 @@
   left: 10%;
   right: 10%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.25), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.25), transparent);
 }
 
 /* ── 19. 空状态图标增强 ── */
@@ -548,11 +548,11 @@
 }
 @keyframes empty-glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.3);
     transform: translateY(0) scale(1);
   }
   50% {
-    box-shadow: 0 0 60px rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 60px rgba(var(--accent-rgb), 0.5);
     transform: translateY(-10px) scale(1.05);
   }
 }
@@ -603,7 +603,7 @@
 
 /* ── 23. 空状态标题渐变 ── */
 .empty-title {
-  background: linear-gradient(135deg, #f1f5f9, #a78bfa, #6366f1) !important;
+  background: linear-gradient(135deg, #f1f5f9, var(--accent-text), var(--accent-2)) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   background-clip: text !important;
@@ -623,7 +623,7 @@
 /* ── 25. 取消流式按钮红色发光 ── */
 #cancel-stream-btn:hover {
   background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  color: var(--error-text);
   border-color: rgba(239, 68, 68, 0.35);
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
 }
@@ -668,8 +668,8 @@
   transition: all var(--transition-fast), box-shadow var(--transition-normal);
 }
 #back-to-slots-btn:hover {
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.4) !important;
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.4) !important;
 }
 
 /* ── 30. 侧栏分区装饰线 ── */
@@ -688,9 +688,9 @@
 }
 .slot-card.empty:hover .slot-plus {
   transform: scale(1.2) rotate(90deg);
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
-  box-shadow: 0 0 30px rgba(139, 92, 246, 0.25);
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--accent-text);
+  box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.25);
 }
 
 /* ── 32. 确保 app 在装饰层之上 ── */

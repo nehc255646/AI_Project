@@ -27,6 +27,17 @@
   --accent-glow: 0 0 24px rgba(139, 92, 246, 0.35);
   --accent-glow-strong: 0 0 40px rgba(139, 92, 246, 0.5);
 
+  /* ── 强调色的浅调文字/链接（随主题变化） ── */
+  --accent-rgb: 139, 92, 246;
+  --accent-2-rgb: 99, 102, 241;
+  --accent-3-rgb: 59, 130, 246;
+  --accent-4-rgb: 6, 182, 212;
+  --accent-text: #a78bfa;
+  --accent-text-strong: #c4b5fd;
+  --link-color: #93c5fd;
+  --info-text: #60a5fa;
+  --code-inline-bg: rgba(var(--accent-rgb), 0.12);
+
   /* ── 文字 ── */
   --text-primary: #f0f2f8;
   --text-secondary: #94a3b8;

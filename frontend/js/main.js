@@ -31,9 +31,13 @@ import { $ } from "./utils.js";
 // ── 轻提示 ──
 import { showToast } from "./toast.js";
 
+// ── 主题 ──
+import { initTheme, openThemeModal, closeThemeModal } from "./theme.js";
+
 // ── 初始化 ──
 
 async function init() {
+  initTheme();
   await loadModels();
   await loadEnvStatus();
   await loadSlots();
@@ -100,6 +104,14 @@ function setupEventListeners() {
   $("#help-close-btn").addEventListener("click", closeHelpModal);
   $("#help-got-it").addEventListener("click", closeHelpModal);
 
+  // 主题（宫格页与聊天页右上角按钮 + 弹层关闭）
+  $("#theme-btn-slot").addEventListener("click", openThemeModal);
+  $("#theme-btn-chat").addEventListener("click", openThemeModal);
+  $("#theme-close-btn").addEventListener("click", closeThemeModal);
+  $("#theme-modal").addEventListener("click", (e) => {
+    if (e.target.id === "theme-modal") closeThemeModal();
+  });
+
   // 发送
   $("#send-btn").addEventListener("click", sendMessage);
 
@@ -135,6 +147,13 @@ function setupEventListeners() {
     const helpModal = document.getElementById("help-modal");
     if (!helpModal.classList.contains("hidden")) {
       closeHelpModal();
+      return;
+    }
+
+    // 关闭主题弹层
+    const themeModal = document.getElementById("theme-modal");
+    if (!themeModal.classList.contains("hidden")) {
+      closeThemeModal();
       return;
     }
 

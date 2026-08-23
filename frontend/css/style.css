@@ -2,6 +2,7 @@
  * Import order matters: variables → base → components → responsive
  */
 @import "./variables.css";
+@import "./themes.css";
 @import "./base.css";
 @import "./sidebar.css";
 @import "./slots.css";

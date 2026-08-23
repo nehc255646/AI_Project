@@ -11,6 +11,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+  <!-- Theme: apply saved theme before first paint to avoid flash -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("ai_chat_theme");
+        if (t && t !== "cosmic") document.documentElement.setAttribute("data-theme", t);
+      } catch (_) { /* localStorage 不可用时使用默认主题 */ }
+    })();
+  </script>
+
   <!-- CSS is imported via JS (Vite handles bundling) -->
 </head>
 <body>
@@ -620,6 +630,7 @@
       <!-- === Slot Grid View === -->
       <div id="slot-view">
         <header id="slot-header">
+          <button id="theme-btn-slot" class="help-btn-top" title="主题">🎨 主题</button>
           <button id="help-btn-slot" class="help-btn-top" title="帮助">❓ 帮助</button>
           <button id="import-backup-slot-btn" class="help-btn-top" title="导入存档备份">📤 导入备份</button>
           <div class="slot-header-content">
@@ -642,6 +653,7 @@
           <div class="header-actions">
             <span id="streaming-status-badge" class="streaming-badge hidden">回复中</span>
             <button id="cancel-stream-btn" class="icon-btn header-action-btn hidden" title="取消回复">■</button>
+            <button id="theme-btn-chat" class="icon-btn header-action-btn" title="主题">🎨</button>
             <button id="help-btn-chat" class="icon-btn header-action-btn help-header-btn" title="帮助">❓</button>
             <button id="back-to-slots-header-btn" class="icon-btn header-action-btn" title="返回存档选择">☰</button>
           </div>
@@ -673,6 +685,18 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Theme Picker Modal -->
+  <div id="theme-modal" class="modal-overlay hidden">
+    <div class="modal-content theme-modal-content">
+      <div class="help-modal-header">
+        <div class="help-modal-icon">🎨</div>
+        <div class="help-modal-title">选择主题</div>
+        <button class="help-close-btn" id="theme-close-btn" title="关闭">✕</button>
+      </div>
+      <div class="theme-list" id="theme-list"></div>
+    </div>
   </div>
 
   <!-- Entry point — Vite resolves this into the bundle -->
