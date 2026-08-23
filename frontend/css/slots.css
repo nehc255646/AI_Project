@@ -65,7 +65,7 @@
 /* ── 存档卡牌 ── */
 .slot-card {
   position: relative;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(145deg, rgba(var(--surface-rgb), 0.03), rgba(var(--surface-rgb), 0.06));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   padding: 20px 16px;
@@ -90,13 +90,13 @@
 /* ── 空卡牌 ── */
 .slot-card.empty {
   border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--glass-border);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(var(--surface-rgb), 0.015);
 }
 
 .slot-card.empty:hover {
@@ -112,7 +112,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--surface-rgb), 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -129,14 +129,14 @@
 
 .slot-card .slot-index-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
   font-weight: 500;
   letter-spacing: 0.05em;
 }
 
 /* ── 已用卡牌内容 ── */
 .slot-card.used {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(145deg, rgba(var(--surface-rgb), 0.03), rgba(var(--surface-rgb), 0.06));
 }
 
 .slot-card .slot-card-content {

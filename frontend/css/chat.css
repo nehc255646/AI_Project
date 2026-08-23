@@ -10,7 +10,7 @@
 #chat-header {
   padding: 12px 20px;
   border-bottom: 1px solid var(--glass-border);
-  background: rgba(8, 14, 26, 0.85);
+  background: var(--panel-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   display: flex;
@@ -60,7 +60,7 @@
 .icon-btn:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-strong);
 }
 
 .header-info {
@@ -200,8 +200,8 @@
   box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.35);
 }
 .message.assistant .avatar {
-  background: linear-gradient(135deg, #1a2332, #1e293b);
-  color: #94a3b8;
+  background: var(--ai-avatar-bg);
+  color: var(--ai-avatar-color);
   border: 1px solid var(--glass-border);
 }
 
@@ -298,7 +298,7 @@
 .message .user-edit-btn:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-strong);
 }
 
 .message.assistant:last-of-type .regenerate-btn {
@@ -381,7 +381,7 @@
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
-  color: #e2e8f0;
+  color: var(--code-text);
   background: none;
   padding: 0;
 }
@@ -399,7 +399,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--surface-rgb), 0.02);
   border-bottom: 1px solid var(--code-border);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   font-size: 11px;
@@ -482,8 +482,8 @@
   margin: 16px 0 8px;
   line-height: 1.4;
 }
-.bubble h1 { font-size: 19px; color: #f1f5f9; }
-.bubble h2 { font-size: 17px; color: #f1f5f9; }
+.bubble h1 { font-size: 19px; color: var(--text-primary); }
+.bubble h2 { font-size: 17px; color: var(--text-primary); }
 .bubble h3 { font-size: 15px; }
 .bubble h4 { font-size: 14px; }
 
@@ -566,7 +566,7 @@
 /* 模型2 标签与模型1的 label 在 JS 中用不同 class 区分 */
 /* 在 addMessage 中，如果 label 含 🌟，会追加 model-label-bar--model2 */
 .model-label-bar--model2 {
-  color: #fbbf24 !important;
+  color: var(--model2-label) !important;
 }
 
 /* 侧栏模型2 显示 */
@@ -612,7 +612,7 @@
 
 .response-mode-content:hover {
   background: var(--bg-surface-hover);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-strong);
 }
 
 .response-mode-icon {
@@ -680,7 +680,7 @@
 #input-area {
   padding: 12px 24px 16px;
   border-top: 1px solid var(--glass-border);
-  background: rgba(8, 14, 26, 0.85);
+  background: var(--panel-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }

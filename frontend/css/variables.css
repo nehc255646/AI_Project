@@ -55,6 +55,7 @@
   /* ── 代码块 ── */
   --code-bg: #0a0e17;
   --code-border: rgba(255, 255, 255, 0.06);
+  --code-text: #e2e8f0;
 
   /* ── 状态色 ── */
   --error-bg: rgba(239, 68, 68, 0.15);
@@ -65,6 +66,19 @@
   --warning: #f59e0b;
   --warning-bg: rgba(245, 158, 11, 0.15);
   --info: #3b82f6;
+
+  /* ── 面板 / 头像 / 装饰（浅色模式下整体反转） ── */
+  --panel-bg: rgba(8, 14, 26, 0.85);          /* 顶栏/输入区/侧栏毛玻璃底 */
+  --surface-rgb: 255, 255, 255;               /* 半透明表面叠层的基色 */
+  --border-strong: rgba(255, 255, 255, 0.15); /* 悬停强边框 */
+  --ai-avatar-bg: linear-gradient(135deg, #1a2332, #1e293b);
+  --ai-avatar-color: #94a3b8;
+  --model2-label: #fbbf24;                    /* 双模型模型2 标签色 */
+  --star-rgb: 255, 255, 255;                  /* 星空粒子 */
+  --star-accent-rgb: 167, 139, 250;
+  --star-accent-2-rgb: 147, 197, 253;
+  --noise-rgb: 255, 255, 255;                 /* 网格纹理 */
+  --empty-title-start: #f1f5f9;               /* 空状态标题渐变起点 */
 
   /* ── 尺寸 ── */
   --sidebar-w: 320px;
@@ -92,4 +106,83 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Consolas", "SF Mono", monospace;
+}
+
+/* ═══════════════════════════════════════════
+   浅色模式 — <html data-mode="light">
+   仅覆盖中性色（背景/文字/玻璃/阴影/装饰）；
+   强调色光谱沿用 data-theme（含下方 cosmic 浅色默认值）。
+   ═══════════════════════════════════════════ */
+html[data-mode="light"] {
+  /* ── 背景层级 ── */
+  --bg-deepest: #eef2f7;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e9eef5;
+  --surface-rgb: 15, 23, 42;
+  --bg-surface: rgba(var(--surface-rgb), 0.045);
+  --bg-surface-hover: rgba(var(--surface-rgb), 0.08);
+  --bg-surface-active: rgba(var(--surface-rgb), 0.12);
+
+  /* ── 玻璃拟态 ── */
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(15, 23, 42, 0.1);
+  --glass-border-hover: rgba(15, 23, 42, 0.2);
+  --glass-shadow: 0 8px 40px rgba(15, 23, 42, 0.1);
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --border-strong: rgba(15, 23, 42, 0.24);
+
+  /* ── 强调色文字（cosmic 默认主题的浅底深调变体，
+        其余主题由 themes.css 的组合选择器覆盖） ── */
+  --accent-text: #6d28d9;
+  --accent-text-strong: #5b21b6;
+  --link-color: #2563eb;
+  --info-text: #2563eb;
+
+  /* ── 文字 ── */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-muted: #94a3b8;
+
+  /* ── 消息气泡 ── */
+  --user-msg-shadow: 0 4px 20px rgba(124, 58, 237, 0.25), 0 1px 4px rgba(15, 23, 42, 0.12);
+  --ai-msg-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.6));
+  --ai-msg-border: rgba(15, 23, 42, 0.09);
+  --ai-msg-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
+
+  /* ── 代码块 ── */
+  --code-bg: #ffffff;
+  --code-border: rgba(15, 23, 42, 0.1);
+  --code-text: #334155;
+
+  /* ── 状态色（浅底下加深保证对比度） ── */
+  --error-bg: rgba(220, 38, 38, 0.08);
+  --error-text: #b91c1c;
+  --error-border: rgba(220, 38, 38, 0.22);
+  --success: #16a34a;
+  --success-bg: rgba(22, 163, 74, 0.1);
+  --warning: #d97706;
+  --warning-bg: rgba(217, 119, 6, 0.1);
+  --info: #2563eb;
+
+  /* ── 阴影预设（减淡） ── */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.1);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 16px 48px rgba(15, 23, 42, 0.16);
+
+  /* ── 强调色光晕（浅底下收敛） ── */
+  --accent-glow: 0 0 24px rgba(var(--accent-rgb), 0.2);
+  --accent-glow-strong: 0 0 40px rgba(var(--accent-rgb), 0.3);
+
+  /* ── 面板 / 头像 / 装饰 ── */
+  --ai-avatar-bg: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  --ai-avatar-color: #475569;
+  --model2-label: #b45309;
+  --star-rgb: 100, 116, 139;
+  --star-accent-rgb: 124, 58, 237;
+  --star-accent-2-rgb: 37, 99, 235;
+  --noise-rgb: 15, 23, 42;
+  --empty-title-start: #0f172a;
 }

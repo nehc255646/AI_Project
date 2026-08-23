@@ -2,7 +2,7 @@
 #sidebar {
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
-  background: rgba(8, 14, 26, 0.88);
+  background: var(--panel-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border-right: 1px solid var(--glass-border);
@@ -149,7 +149,7 @@
   opacity: 1;
 }
 .title-edit-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--surface-rgb), 0.1);
 }
 .title-edit-wrapper {
   margin-top: 8px;
@@ -157,7 +157,7 @@
 .title-input {
   width: 100%;
   padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-tertiary);
   border: 1px solid rgba(var(--accent-rgb), 0.4);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -227,5 +227,5 @@
 .btn-secondary:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-strong);
 }

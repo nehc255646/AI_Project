@@ -1,4 +1,4 @@
-﻿/* ── 主题变体 — 通过 <html data-theme="..."> 切换 ──
+/* ── 主题变体 — 通过 <html data-theme="..."> 切换 ──
  * 默认主题（cosmic 宇宙紫蓝）定义在 variables.css 的 :root，
  * 此处仅覆盖颜色类变量；尺寸 / 字体 / 过渡等保持不变。
  */
@@ -105,4 +105,42 @@
 
   --user-msg-gradient: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #0891b2 100%);
   --user-msg-shadow: 0 4px 20px rgba(2, 132, 199, 0.35), 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* =====================================================
+   浅色模式下的各主题强调色文字变体 —
+   深底用的 pastel 浅调在浅底下对比度不足，
+   组合选择器 (0,2,0) 覆盖上方的单主题定义。
+   ===================================================== */
+
+/* ── 翡翠绿 · 浅色 ── */
+[data-theme="emerald"][data-mode="light"] {
+  --accent-text: #047857;
+  --accent-text-strong: #065f46;
+  --link-color: #0284c7;
+  --info-text: #0d9488;
+}
+
+/* ── 暖橙日落 · 浅色 ── */
+[data-theme="sunset"][data-mode="light"] {
+  --accent-text: #c2410c;
+  --accent-text-strong: #9a3412;
+  --link-color: #b45309;
+  --info-text: #ea580c;
+}
+
+/* ── 樱花粉 · 浅色 ── */
+[data-theme="sakura"][data-mode="light"] {
+  --accent-text: #be185d;
+  --accent-text-strong: #9d174d;
+  --link-color: #7c3aed;
+  --info-text: #db2777;
+}
+
+/* ── 深海青 · 浅色 ── */
+[data-theme="ocean"][data-mode="light"] {
+  --accent-text: #0369a1;
+  --accent-text-strong: #075985;
+  --link-color: #4f46e5;
+  --info-text: #0891b2;
 }

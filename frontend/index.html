@@ -11,12 +11,21 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <!-- Theme: apply saved theme before first paint to avoid flash -->
+  <!-- Theme: apply saved theme/mode before first paint to avoid flash -->
   <script>
     (function () {
       try {
         var t = localStorage.getItem("ai_chat_theme");
         if (t && t !== "cosmic") document.documentElement.setAttribute("data-theme", t);
+        var m = localStorage.getItem("ai_chat_theme_mode");
+        if (m !== "light" && m !== "dark") {
+          m = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        if (m === "light") {
+          document.documentElement.setAttribute("data-mode", "light");
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#f8fafc");
+        }
       } catch (_) { /* localStorage 不可用时使用默认主题 */ }
     })();
   </script>

@@ -89,7 +89,7 @@ body::before {
 /* ── 选中文字 ── */
 ::selection {
   background: rgba(var(--accent-rgb), 0.3);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 /* ── 链接 ── */

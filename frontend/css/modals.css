@@ -339,7 +339,7 @@
 .help-close-btn:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-strong);
 }
 
 .help-modal-body {
@@ -533,7 +533,7 @@
 .wizard-step-connector {
   width: 32px;
   height: 2px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--surface-rgb), 0.08);
   margin: 0 8px;
   border-radius: 1px;
 }
@@ -582,7 +582,7 @@
   color: var(--text-secondary);
   font-family: var(--font-mono);
   cursor: help;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+  border-bottom: 1px dashed var(--glass-border-hover);
   padding-bottom: 2px;
 }
 
@@ -829,6 +829,40 @@
   overflow-y: auto;
 }
 
+/* ── 深浅色分段切换 ── */
+.mode-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mode-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.mode-option:hover {
+  background: var(--bg-surface-hover);
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+.mode-option.active {
+  border-color: rgba(var(--accent-rgb), 0.6);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text-primary);
+}
+
 .theme-option {
   display: flex;
   align-items: center;
@@ -858,7 +892,7 @@
   flex-shrink: 0;
   border-radius: var(--radius-full);
   overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 1px var(--border-strong);
 }
 .theme-swatch {
   width: 18px;
