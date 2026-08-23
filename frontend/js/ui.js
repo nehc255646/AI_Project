@@ -167,8 +167,8 @@ export function renderMessages(history) {
       lastUserMsgId = messageId;
     }
 
-    // 单模型模式才添加重试按钮（历史消息）
-    if (!isUser && lastUserMsgId !== null && !isDual) {
+    // 给 assistant 消息加重试按钮（历史消息，单/双模型通用）
+    if (!isUser && lastUserMsgId !== null) {
       const msgDiv = bubble ? bubble.closest(".message") : null;
       if (msgDiv) {
         let regenBtn = msgDiv.querySelector(".regenerate-btn");

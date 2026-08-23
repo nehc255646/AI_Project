@@ -14,7 +14,7 @@
 - **模型热更换**：存档内 `🔄 更换模型`，`PATCH /api/slots/{id}/config` 原子更新，双模型两侧完全独立
 - **流式对话**：`POST /api/chat` + `POST /slots/{id}/chat/continue` SSE 流，支持取消（`■`）与断点回滚，已落库回滚 `delete_messages_from`
 - **继续回复**：单模型合并续写最后一条 assistant；双模型相当于用户留空让两位角色各再回复一轮
-- **消息精细操作**：编辑（保存后自动重发）、删除（按 `id` 精确）、重新生成（单模型 `↻`）、清空对话
+- **消息精细操作**：编辑（保存后自动重发）、删除（按 `id` 精确）、重新生成（单/双模型 `↻`，删除该轮及其后消息并重发）、清空对话
 - **标题 / 密钥 / 参数**：侧栏标题原地编辑；密钥存档级绑定（环境变量优先，Ollama 本地免密钥）；`temperature / top_p / min_p / top_k / repeat_penalty / presence_penalty / frequency_penalty / num_ctx / num_predict` + DeepSeek `thinking_enabled` 可选
 - **导入导出**：导出 Markdown、导出可完整恢复的 JSON 备份（`GET /backup`）与导入（`POST /backup`）
 - **并发保护**：内存 `asyncio.Lock` + MySQL `GET_LOCK(ai_chat_slot_*)`，`slot_busy` 友好提示；5xx/网络指数退避重试，流开始后不重试

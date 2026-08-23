@@ -21,6 +21,20 @@ import {
   loadSlots,
 } from "./ui.js";
 
+/** 给消息元素挂载 ↻ 重新生成按钮（记录所属用户消息 ID） */
+function attachRegenBtn(msgDiv, userMsgId) {
+  if (!msgDiv || !userMsgId) return;
+  let regenBtn = msgDiv.querySelector(".regenerate-btn");
+  if (!regenBtn) {
+    regenBtn = document.createElement("button");
+    regenBtn.className = "regenerate-btn";
+    regenBtn.textContent = "↻";
+    regenBtn.title = "重新生成";
+    msgDiv.appendChild(regenBtn);
+  }
+  regenBtn.dataset.userMsgId = userMsgId;
+}
+
 /** 从 .bubble 中获取文本内容容器 */
 function getContent(bubble) {
   if (!bubble) return null;
@@ -281,6 +295,13 @@ export async function sendMessage() {
                     }
                   });
                 }
+
+                // 双模型：给本轮各 assistant 消息加重试按钮（继续回复轮无用户消息 ID，跳过）
+                if (userMessageId) {
+                  bubbles.forEach((b) => {
+                    attachRegenBtn(getMsgDiv(b.el), userMessageId);
+                  });
+                }
               } else {
                 // 单模型
                 userMessageId = event.user_message_id;
@@ -300,17 +321,9 @@ export async function sendMessage() {
                   }
                   finishStreaming(entry.el);
 
-                  // 单模型：给最后一个 assistant 消息加重试按钮
+                  // 给 assistant 消息加重试按钮
                   if (userMsgDiv && userMessageId) {
-                    let regenBtn = msgDiv.querySelector(".regenerate-btn");
-                    if (!regenBtn) {
-                      regenBtn = document.createElement("button");
-                      regenBtn.className = "regenerate-btn";
-                      regenBtn.textContent = "↻";
-                      regenBtn.title = "重新生成";
-                      msgDiv.appendChild(regenBtn);
-                    }
-                    regenBtn.dataset.userMsgId = userMessageId;
+                    attachRegenBtn(msgDiv, userMessageId);
                   }
                 }
               }
@@ -904,14 +917,10 @@ function showOllamaKeyCard(content, onSaved, target = "model1") {
   });
 }
 
-// ── 重新生成（仅单模型） ──
+// ── 重新生成（单/双模型通用） ──
 
 export async function regenerate(userMsgId) {
   if (state.streaming) return;
-  if (state.dualEnabled) {
-    showToast("双模型模式不支持重试，请编辑用户消息", "warning");
-    return;
-  }
 
   const regenBtn = document.querySelector(`.regenerate-btn[data-user-msg-id="${userMsgId}"]`);
   if (!regenBtn) return;
