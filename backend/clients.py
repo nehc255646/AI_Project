@@ -1,28 +1,21 @@
 """
-AI 客户端层 — 统一通过 OpenAI 兼容接口调用各提供商模型。
+AI 客户端层 — 统一通过 OpenAI 兼容接口调用。
 
-支持流式对话、API 临时故障的自动重试（指数退避）、
-密钥解析（存档密钥优先，其次环境变量）。
+支持流式对话、连通性测试、API 临时故障的自动重试（指数退避）。
+供应商 / 模型由数据库目录解析后再传入。
 """
 import asyncio
 import logging
-import os
+import time
 from typing import AsyncGenerator, Dict, List, Tuple
 
 import httpx
 from openai import AsyncOpenAI, APIError, APITimeoutError, RateLimitError
 
-from config import PROVIDER_CONFIG, MODEL_CONFIG
-
 logger = logging.getLogger(__name__)
 
-# API 调用重试配置
 _API_RETRY_MAX = 2
-_API_RETRY_DELAY = 1.0  # 初始延迟（秒），指数退避
-
-# 支持把 min_p / top_k 放进 extra_body 的提供商（其他提供商忽略，避免 400）
-_EXTRA_BODY_PROVIDERS = {"deepseek", "dashscope"}
-_OLLAMA_EXTRA_BODY_PROVIDERS = {"ollama_cloud", "ollama_local"}
+_API_RETRY_DELAY = 1.0
 
 
 class AIClientError(Exception):
@@ -31,18 +24,11 @@ class AIClientError(Exception):
         self.error_code = error_code
 
 
-def _is_deepseek_model(model_key: str, model_id: str) -> bool:
-    """模型清单固定维护；模型名含 deepseek 的条目统一视为可选思考模型。"""
-    return "deepseek" in model_id.lower() or "deepseek" in model_key.lower()
-
-
 class AIClient:
     def __init__(self):
-        # 按 (base_url, api_key) 缓存客户端
         self._clients: Dict[Tuple[str, str], AsyncOpenAI] = {}
 
     async def close(self) -> None:
-        """释放所有 OpenAI 兼容客户端（服务关闭时调用）。"""
         for client in self._clients.values():
             try:
                 await client.close()
@@ -50,105 +36,48 @@ class AIClient:
                 pass
         self._clients.clear()
 
-    def _get_client(self, provider: str, api_key: str) -> AsyncOpenAI:
-        cfg = PROVIDER_CONFIG.get(provider)
-        if not cfg:
-            raise ValueError(f"不支持的提供商: {provider}")
-        cache_key = (cfg["base_url"], api_key)
+    def _get_client(self, base_url: str, api_key: str, timeout: float = 60) -> AsyncOpenAI:
+        cache_key = (base_url, api_key, timeout)
         if cache_key not in self._clients:
             self._clients[cache_key] = AsyncOpenAI(
-                api_key=api_key, base_url=cfg["base_url"], timeout=60
+                api_key=api_key, base_url=base_url, timeout=timeout,
             )
         return self._clients[cache_key]
 
-    def _resolve_api_key(self, provider: str, api_key: str) -> str:
-        """密钥解析：存档传入的密钥优先，其次环境变量，Ollama 本地用占位密钥。"""
-        cfg = PROVIDER_CONFIG.get(provider, {})
-        if provider == "ollama_local":
-            return cfg.get("dummy_api_key", "ollama")
-        if api_key:
-            return api_key
-        env_name = cfg.get("api_key_env", "")
-        env_val = os.environ.get(env_name) if env_name else ""
-        if env_val:
-            return env_val
-        # opencode / opencode_zen 共用同一 Key，兼容旧的 OPENCODE_ZEN_API_KEY
-        if provider in ("opencode", "opencode_zen"):
-            for alt in ("OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"):
-                if alt == env_name:
-                    continue
-                alt_val = os.environ.get(alt, "")
-                if alt_val:
-                    return alt_val
-        raise ValueError(f"{cfg.get('name', provider)} API Key 未配置，请在创建存档时提供")
-
-    # ── 对外入口：流式对话 ──
-
-    async def stream_chat(
-        self, messages: List[Dict], model_key: str, api_key: str = "",
-        max_tokens: int | None = None, params: dict | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """异步生成器，逐块产出回复文本（适配 SSE）。"""
-        cfg = MODEL_CONFIG.get(model_key)
-        if not cfg:
-            raise ValueError(f"不支持的模型: {model_key}")
-
-        provider = cfg["provider"]
-        model_id = cfg["id"]
-        key = self._resolve_api_key(provider, api_key)
-        client = self._get_client(provider, key)
-
-        if max_tokens is None:
-            max_tokens = cfg.get("max_tokens")
-        # 用户参数中的 num_predict 优先于模型配置的 max_tokens
-        if params and params.get("num_predict") is not None:
-            requested_tokens = params["num_predict"]
-            max_tokens = min(requested_tokens, cfg.get("max_tokens", requested_tokens))
-
-        kwargs = dict(model=model_id, messages=messages, stream=True)
-
-        # OpenAI 兼容通用参数
+    def _build_kwargs(
+        self,
+        messages: List[Dict],
+        model_id: str,
+        max_tokens: int | None,
+        params: dict | None,
+        stream: bool,
+    ) -> dict:
+        kwargs = dict(model=model_id, messages=messages, stream=stream)
         if params:
             for k in ("temperature", "top_p", "presence_penalty", "frequency_penalty"):
                 if k in params:
                     kwargs[k] = params[k]
-
+        if params and params.get("num_predict") is not None:
+            requested = params["num_predict"]
+            cap = max_tokens if max_tokens is not None else requested
+            max_tokens = min(requested, cap)
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        return kwargs
 
-        # DeepSeek 支持按存档选择思考模式，其他模型统一禁用思考
-        if _is_deepseek_model(model_key, model_id):
-            thinking_enabled = (params or {}).get("thinking_enabled", True)
-            if provider == "dashscope":
-                kwargs.setdefault("extra_body", {}).update({"enable_thinking": thinking_enabled})
-            elif provider == "deepseek":
-                thinking_type = "enabled" if thinking_enabled else "disabled"
-                kwargs.setdefault("extra_body", {}).update({"thinking": {"type": thinking_type}})
-            else:
-                kwargs["reasoning_effort"] = "high" if thinking_enabled else "none"
-        else:
-            disable_thinking = PROVIDER_CONFIG.get(provider, {}).get("disable_thinking")
-            if disable_thinking:
-                for k, v in disable_thinking.items():
-                    if k == "extra_body":
-                        kwargs.setdefault("extra_body", {}).update(v)
-                    else:
-                        kwargs[k] = v
+    async def stream_chat(
+        self,
+        messages: List[Dict],
+        model_id: str,
+        base_url: str,
+        api_key: str,
+        max_tokens: int | None = None,
+        params: dict | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """异步生成器，逐块产出回复文本（适配 SSE）。"""
+        client = self._get_client(base_url, api_key)
+        kwargs = self._build_kwargs(messages, model_id, max_tokens, params, stream=True)
 
-        # extra_body：仅部分提供商支持的非标准参数
-        extra_body = {}
-        if provider in _EXTRA_BODY_PROVIDERS and params:
-            for k in ("min_p", "top_k"):
-                if k in params:
-                    extra_body[k] = params[k]
-        if provider in _OLLAMA_EXTRA_BODY_PROVIDERS and params:
-            for k in ("min_p", "top_k", "num_ctx", "repeat_penalty"):
-                if k in params:
-                    extra_body[k] = params[k]
-        if extra_body:
-            kwargs.setdefault("extra_body", {}).update(extra_body)
-
-        # 仅请求阶段可重试，流式输出开始后中断直接失败
         last_exception = None
         started = False
         for attempt in range(_API_RETRY_MAX + 1):
@@ -158,7 +87,7 @@ class AIClient:
                     if chunk.choices and chunk.choices[0].delta.content:
                         started = True
                         yield chunk.choices[0].delta.content
-                return  # 成功完成
+                return
             except (RateLimitError, APITimeoutError, APIError,
                     httpx.TimeoutException, httpx.NetworkError) as e:
                 if started:
@@ -166,7 +95,6 @@ class AIClient:
                     raise AIClientError("回复生成中途中断，请重试", "stream_interrupted") from e
                 last_exception = e
 
-                # 速率限制
                 if isinstance(e, RateLimitError) or getattr(e, "status_code", None) == 429:
                     logger.warning(f"API 速率限制 (尝试 {attempt + 1}): {e}")
                     if attempt < _API_RETRY_MAX:
@@ -174,7 +102,6 @@ class AIClient:
                         continue
                     raise AIClientError("API 请求频率过高，请稍后重试", "rate_limited") from e
 
-                # 超时
                 if isinstance(e, (APITimeoutError, httpx.TimeoutException)):
                     logger.warning(f"API 请求超时 (尝试 {attempt + 1}): {e}")
                     if attempt < _API_RETRY_MAX:
@@ -182,11 +109,10 @@ class AIClient:
                         continue
                     raise AIClientError("API 请求超时，请检查网络连接", "timeout") from e
 
-                # OpenAI 兼容 API 返回错误
                 if isinstance(e, APIError):
                     status = e.status_code
                     if status == 401:
-                        raise AIClientError("API 认证失败，请检查 API Key 是否正确", "auth_failed") from e
+                        raise AIClientError("API 认证失败，请到「模型配置」检查该供应商的密钥", "auth_failed") from e
                     if status == 403:
                         raise AIClientError("API 权限不足，请检查账户权限", "permission_denied") from e
                     if status >= 500:
@@ -195,17 +121,56 @@ class AIClient:
                             await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                             continue
                         raise AIClientError(f"API 服务暂时不可用 ({status})", "service_unavailable") from e
-                    raise  # 其他 API 错误直接抛出
+                    raise
 
-                # httpx 网络错误
                 logger.warning(f"网络错误 (尝试 {attempt + 1}): {e}")
                 if attempt < _API_RETRY_MAX:
                     await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                     continue
                 raise AIClientError(f"网络连接失败，请检查网络: {e}", "network_error") from e
 
-        # 所有重试耗尽
         raise AIClientError(
             f"API 请求失败 (已重试 {_API_RETRY_MAX} 次): {last_exception}",
             "request_failed",
         )
+
+    async def test_hello(self, model_id: str, base_url: str, api_key: str) -> dict:
+        """向模型发一条 hello，仅供用户参考连通性。"""
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=20)
+        started = time.perf_counter()
+        try:
+            resp = await client.chat.completions.create(
+                model=model_id,
+                messages=[{"role": "user", "content": "hello"}],
+                max_tokens=32,
+                stream=False,
+            )
+            text = ""
+            if resp.choices:
+                text = (resp.choices[0].message.content or "").strip()
+            latency = int((time.perf_counter() - started) * 1000)
+            preview = text[:200]
+            return {"ok": True, "latency_ms": latency, "preview": preview}
+        except RateLimitError as e:
+            return {"ok": False, "error": f"速率限制: {e}"}
+        except (APITimeoutError, httpx.TimeoutException):
+            return {"ok": False, "error": "请求超时，请检查网络或基础 URL"}
+        except APIError as e:
+            status = e.status_code
+            if status == 401:
+                return {"ok": False, "error": "认证失败，请检查 API 密钥"}
+            if status == 403:
+                return {"ok": False, "error": "权限不足"}
+            if status == 404:
+                return {"ok": False, "error": "接口或模型不存在，请检查基础 URL 与 model-id"}
+            return {"ok": False, "error": f"API 错误 ({status}): {e}"}
+        except httpx.NetworkError as e:
+            return {"ok": False, "error": f"网络连接失败: {e}"}
+        except Exception as e:
+            logger.warning(f"模型测试失败: {e}", exc_info=True)
+            return {"ok": False, "error": str(e) or "测试失败"}
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass

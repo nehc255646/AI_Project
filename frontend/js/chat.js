@@ -338,7 +338,7 @@ export async function sendMessage() {
               // 后端会保留用户消息与已完成回复，前端仅移除失败模型的未完成气泡
               const completedBubbles = bubbles.filter(b => b.msgId);
               const hasCompleted = completedBubbles.length > 0 &&
-                code !== "ollama_need_key" && code !== "database_error";
+                code !== "database_error";
 
               if (hasCompleted) {
                 bubbles.forEach(b => {
@@ -374,38 +374,11 @@ export async function sendMessage() {
                 if (userMsgDiv) userMsgDiv.remove();
               }
 
-              if (code === "ollama_need_key") {
-                const container = document.getElementById("chat-messages");
-                const empty = container?.querySelector(".empty-state");
-                if (empty) empty.remove();
-                const card = document.createElement("div");
-                card.className = "message error";
-                card.innerHTML = `<div class="bubble">
-                  <div style="margin-bottom:12px">⚠️ ${escapeHtml(content || "无法连接")}</div>
-                  <input type="password" id="ollama-key-input" class="create-input"
-                    placeholder="输入 Ollama Cloud API Key" autocomplete="off"
-                    style="margin-bottom:10px;width:100%" />
-                  <button id="ollama-key-save-btn" class="modal-btn modal-btn-confirm"
-                    style="width:100%;padding:10px">保存并重试</button>
-                </div>`;
-                container?.appendChild(card);
-                setTimeout(() => document.getElementById("ollama-key-input")?.focus(), 100);
-                document.getElementById("ollama-key-save-btn")?.addEventListener("click", async () => {
-                  const key = document.getElementById("ollama-key-input")?.value.trim();
-                  if (!key) { showToast("请输入 API Key", "warning"); return; }
-                  try {
-                    await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key, target: event.key_target || "model1" });
-                    card.remove();
-                    const input = document.getElementById("message-input");
-                    if (input) { input.value = text; input.focus(); }
-                    sendMessage();
-                  } catch (e) {
-                    showToast("保存失败: " + e.message, "error");
-                  }
-                });
-              } else {
+              {
                 const msgs = {
-                  auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
+                  auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
+                  missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
+                  unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
                   rate_limited: "⏳ 请求过于频繁，请稍后重试",
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
@@ -617,11 +590,11 @@ export async function continueLastReply() {
               // 后端尚未落库，恢复原内容并提示
               contentDiv.innerHTML = renderMarkdown(originalText);
               enhanceCodeBlocks(contentDiv);
-              if (event.code === "ollama_need_key") {
-                showOllamaKeyCard(event.content, () => continueLastReply(), event.key_target || "model1");
-              } else {
+              {
                 const msgsMap = {
-                  auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
+                  auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
+                  missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
+                  unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
                   rate_limited: "⏳ 请求过于频繁，请稍后重试",
                   quota_exceeded: "💰 API 额度不足，请检查账户余额",
                   ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
@@ -814,39 +787,34 @@ async function continueDualTurn() {
             // 错误处理
             case "error": {
               errorHandled = true;
-              if (event.code === "ollama_need_key") {
-                // 后端整体回滚本轮，移除全部新建气泡
-                removeNewBubbles();
-                showOllamaKeyCard(event.content, () => continueLastReply(), event.key_target || "model1");
-              } else {
-                // 非补 Key：保留已完成模型的气泡，移除失败模型未完成的气泡
-                bubbles.forEach((b) => {
-                  if (!b.msgId) {
-                    const d = getMsgDiv(b.el);
-                    if (d) d.remove();
-                  }
-                });
-                bubbles = bubbles.filter((b) => b.msgId);
-                if (currentBubble) {
-                  const d = getMsgDiv(currentBubble);
+              bubbles.forEach((b) => {
+                if (!b.msgId) {
+                  const d = getMsgDiv(b.el);
                   if (d) d.remove();
-                  currentBubble = null;
                 }
-                const msgsMap = {
-                  auth_failed: "🔑 API 认证失败，请检查 API Key 是否正确",
-                  rate_limited: "⏳ 请求过于频繁，请稍后重试",
-                  quota_exceeded: "💰 API 额度不足，请检查账户余额",
-                  ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
-                  config_error: "⚙️ 模型配置错误",
-                  database_error: "💾 存档写入失败，请稍后重试",
-                  network_error: "🔌 网络连接失败，请检查网络连接",
-                  timeout: "⏱️ 请求超时，请稍后重试",
-                  service_unavailable: "🛠️ 模型服务暂时不可用",
-                  permission_denied: "⛔ API 权限不足",
-                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
-                };
-                addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
+              });
+              bubbles = bubbles.filter((b) => b.msgId);
+              if (currentBubble) {
+                const d = getMsgDiv(currentBubble);
+                if (d) d.remove();
+                currentBubble = null;
               }
+              const msgsMap = {
+                auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
+                missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
+                unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
+                rate_limited: "⏳ 请求过于频繁，请稍后重试",
+                quota_exceeded: "💰 API 额度不足，请检查账户余额",
+                ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
+                config_error: "⚙️ 模型配置错误",
+                database_error: "💾 存档写入失败，请稍后重试",
+                network_error: "🔌 网络连接失败，请检查网络连接",
+                timeout: "⏱️ 请求超时，请稍后重试",
+                service_unavailable: "🛠️ 模型服务暂时不可用",
+                permission_denied: "⛔ API 权限不足",
+                slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
+              };
+              addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
               break;
             }
           }
@@ -887,34 +855,6 @@ async function continueDualTurn() {
   setStreaming(false);
   state.streamCancelled = false;
   state.currentReader = null;
-}
-
-/** 补填 Ollama Cloud Key 的内联卡片（保存后执行 onSaved 回调） */
-function showOllamaKeyCard(content, onSaved, target = "model1") {
-  const container = document.getElementById("chat-messages");
-  const card = document.createElement("div");
-  card.className = "message error";
-  card.innerHTML = `<div class="bubble">
-    <div style="margin-bottom:12px">⚠️ ${escapeHtml(content || "无法连接")}</div>
-    <input type="password" id="ollama-key-input" class="create-input"
-      placeholder="输入 Ollama Cloud API Key" autocomplete="off"
-      style="margin-bottom:10px;width:100%" />
-    <button id="ollama-key-save-btn" class="modal-btn modal-btn-confirm"
-      style="width:100%;padding:10px">保存并重试</button>
-  </div>`;
-  container?.appendChild(card);
-  setTimeout(() => document.getElementById("ollama-key-input")?.focus(), 100);
-  document.getElementById("ollama-key-save-btn")?.addEventListener("click", async () => {
-    const key = document.getElementById("ollama-key-input")?.value.trim();
-    if (!key) { showToast("请输入 API Key", "warning"); return; }
-    try {
-      await apiPatch(`/api/slots/${state.currentSlotIndex}/api-key`, { api_key: key, target });
-      card.remove();
-      onSaved();
-    } catch (e) {
-      showToast("保存失败: " + e.message, "error");
-    }
-  });
 }
 
 // ── 重新生成（单/双模型通用） ──

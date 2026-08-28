@@ -12,6 +12,7 @@ export const state = {
   currentReader: null,     // SSE 读取器，用于直接取消
   streamCancelled: false,  // 取消标志
   models: [],
+  providers: [],
   envStatus: {},
   // 双模型状态
   dualEnabled: false,

@@ -19,16 +19,7 @@ MYSQL_PASSWORD=你的 MySQL 密码
 MYSQL_DATABASE=ai_chat
 ```
 
-模型 API Key 可按提供商设置，也可以在创建存档时单独填写：
-
-```text
-DEEPSEEK_API_KEY=
-DASHSCOPE_API_KEY=
-OLLAMA_API_KEY=
-OPENAI_API_KEY=
-GEMINI_API_KEY=
-OPENCODE_API_KEY=
-```
+模型 API Key 在前端「模型配置」中按供应商填写，也可以勾选从环境变量读取（自行指定变量名）。
 
 ## 启动方式
 

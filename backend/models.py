@@ -171,3 +171,31 @@ class ImportMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(default="", max_length=200_000)
     source: Literal["", "single", "model1", "model2"] = ""
+
+
+class CatalogModelIn(BaseModel):
+    model_id: str = Field(min_length=1, max_length=128)
+    display_name: str = Field(default="", max_length=64)
+
+
+class ProviderCreateRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=64)
+    display_name: str = Field(min_length=1, max_length=64)
+    base_url: str = Field(min_length=1, max_length=512)
+    api_key: str = Field(default="", max_length=256)
+    use_env_key: bool = False
+    api_key_env: str = Field(default="", max_length=64)
+    models: list[CatalogModelIn] = Field(default_factory=list)
+
+
+class ProviderUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, max_length=64)
+    base_url: str | None = Field(default=None, max_length=512)
+    api_key: str | None = Field(default=None, max_length=256)
+    use_env_key: bool | None = None
+    api_key_env: str | None = Field(default=None, max_length=64)
+
+
+class CatalogModelUpdateRequest(BaseModel):
+    model_id: str | None = Field(default=None, min_length=1, max_length=128)
+    display_name: str | None = Field(default=None, max_length=64)

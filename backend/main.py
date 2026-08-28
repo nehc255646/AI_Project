@@ -22,6 +22,7 @@ from routes.slots import router as slots_router
 from routes.chat import router as chat_router
 from routes.models import router as models_router
 from routes.backgrounds import router as backgrounds_router
+from routes.catalog import router as catalog_router
 
 # ── Logging ──
 
@@ -76,6 +77,7 @@ app.add_middleware(
 app.include_router(slots_router)
 app.include_router(chat_router)
 app.include_router(models_router)
+app.include_router(catalog_router)
 app.include_router(backgrounds_router)
 
 # ── Serve background images ──

@@ -134,7 +134,7 @@ class SlotManager:
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS slots (
                         id INT PRIMARY KEY,
-                        model VARCHAR(64) NOT NULL DEFAULT '',
+                        model VARCHAR(192) NOT NULL DEFAULT '',
                         system_prompt TEXT,
                         api_key VARCHAR(256) DEFAULT '',
                         title VARCHAR(128) DEFAULT '',
@@ -170,6 +170,38 @@ class SlotManager:
                         "ALTER TABLE `messages` ADD COLUMN `source` VARCHAR(16) NOT NULL DEFAULT '' AFTER role"
                     )
                     logger.info("已添加 source 列到 messages 表")
+                cursor.execute("SHOW COLUMNS FROM `slots` LIKE 'model'")
+                model_col = cursor.fetchone()
+                if model_col and "192" not in str(model_col.get("Type", "")).lower():
+                    cursor.execute(
+                        "ALTER TABLE `slots` MODIFY COLUMN `model` VARCHAR(192) NOT NULL DEFAULT ''"
+                    )
+                    logger.info("已扩展 slots.model 为 VARCHAR(192)")
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS providers (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        slug VARCHAR(64) NOT NULL UNIQUE,
+                        display_name VARCHAR(64) NOT NULL DEFAULT '',
+                        base_url VARCHAR(512) NOT NULL DEFAULT '',
+                        api_key VARCHAR(256) DEFAULT '',
+                        use_env_key TINYINT(1) NOT NULL DEFAULT 0,
+                        api_key_env VARCHAR(64) DEFAULT '',
+                        sort_order INT NOT NULL DEFAULT 0,
+                        created_at VARCHAR(32) DEFAULT '',
+                        updated_at VARCHAR(32) DEFAULT ''
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS catalog_models (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        provider_id INT NOT NULL,
+                        model_id VARCHAR(128) NOT NULL,
+                        display_name VARCHAR(64) DEFAULT '',
+                        UNIQUE KEY uniq_provider_model (provider_id, model_id),
+                        FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE,
+                        INDEX idx_catalog_provider (provider_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """)
             conn.commit()
             logger.info("MySQL 数据库表初始化完成")
         except pymysql.Error as e:
@@ -521,3 +553,379 @@ class SlotManager:
         except pymysql.Error as e:
             logger.error(f"update_slot({index}) 失败: {e}")
             return False
+
+    # ── 供应商 / 模型目录 ──
+
+    @staticmethod
+    def model_key(slug: str, model_id: str) -> str:
+        return f"{slug}:{model_id}"
+
+    def _list_models_for_provider(self, cursor, provider_id: int, slug: str) -> List[Dict]:
+        cursor.execute(
+            "SELECT id, model_id, display_name FROM catalog_models "
+            "WHERE provider_id = %s ORDER BY id ASC",
+            (provider_id,),
+        )
+        items = []
+        for m in cursor.fetchall():
+            mid = m.get("model_id") or ""
+            items.append({
+                "id": m["id"],
+                "model_id": mid,
+                "display_name": (m.get("display_name") or "").strip() or mid,
+                "key": self.model_key(slug, mid),
+            })
+        return items
+
+    def list_providers(self) -> List[Dict]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT * FROM providers ORDER BY sort_order ASC, id ASC"
+                    )
+                    rows = list(cursor.fetchall() or [])
+                    result = []
+                    for row in rows:
+                        models = self._list_models_for_provider(
+                            cursor, row["id"], row.get("slug") or "",
+                        )
+                        result.append({
+                            **row,
+                            "models": models,
+                        })
+                    return result
+        except pymysql.Error as e:
+            logger.error(f"list_providers 失败: {e}")
+            raise RuntimeError(f"读取供应商目录失败: {e}")
+
+    def get_provider(self, provider_id: int) -> Optional[Dict]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT * FROM providers WHERE id = %s", (provider_id,))
+                    row = cursor.fetchone()
+                    if not row:
+                        return None
+                    row["models"] = self._list_models_for_provider(
+                        cursor, row["id"], row.get("slug") or "",
+                    )
+                    return row
+        except pymysql.Error as e:
+            logger.error(f"get_provider({provider_id}) 失败: {e}")
+            raise RuntimeError(f"读取供应商失败: {e}")
+
+    def get_catalog_model(self, model_row_id: int) -> Optional[Dict]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT m.id, m.provider_id, m.model_id, m.display_name, "
+                        "p.slug, p.display_name AS provider_name, p.base_url, "
+                        "p.api_key, p.use_env_key, p.api_key_env "
+                        "FROM catalog_models m "
+                        "JOIN providers p ON p.id = m.provider_id "
+                        "WHERE m.id = %s",
+                        (model_row_id,),
+                    )
+                    return cursor.fetchone()
+        except pymysql.Error as e:
+            logger.error(f"get_catalog_model({model_row_id}) 失败: {e}")
+            raise RuntimeError(f"读取模型失败: {e}")
+
+    def resolve_model_key(self, key: str) -> Optional[Dict]:
+        if not key or ":" not in key:
+            return None
+        slug, model_id = key.split(":", 1)
+        if not slug or not model_id:
+            return None
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT m.id, m.provider_id, m.model_id, m.display_name, "
+                        "p.slug, p.display_name AS provider_name, p.base_url, "
+                        "p.api_key, p.use_env_key, p.api_key_env "
+                        "FROM catalog_models m "
+                        "JOIN providers p ON p.id = m.provider_id "
+                        "WHERE p.slug = %s AND m.model_id = %s",
+                        (slug, model_id),
+                    )
+                    return cursor.fetchone()
+        except pymysql.Error as e:
+            logger.error(f"resolve_model_key({key}) 失败: {e}")
+            raise RuntimeError(f"解析模型失败: {e}")
+
+    def list_catalog_models(self) -> List[Dict]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT m.id, m.model_id, m.display_name, "
+                        "p.slug AS provider, p.display_name AS provider_name, "
+                        "p.sort_order "
+                        "FROM catalog_models m "
+                        "JOIN providers p ON p.id = m.provider_id "
+                        "ORDER BY p.sort_order ASC, p.id ASC, m.id ASC"
+                    )
+                    items = []
+                    for row in cursor.fetchall() or []:
+                        mid = row.get("model_id") or ""
+                        items.append({
+                            "key": self.model_key(row.get("provider") or "", mid),
+                            "id": mid,
+                            "display_name": (row.get("display_name") or "").strip() or mid,
+                            "provider": row.get("provider") or "",
+                            "provider_name": row.get("provider_name") or "",
+                            "max_tokens": 8192,
+                        })
+                    return items
+        except pymysql.Error as e:
+            logger.error(f"list_catalog_models 失败: {e}")
+            raise RuntimeError(f"读取模型列表失败: {e}")
+
+    def _slot_rows(self, cursor) -> List[Dict]:
+        cursor.execute("SELECT id, model, dual_config FROM slots")
+        return list(cursor.fetchall() or [])
+
+    def find_slots_referencing_model_key(self, key: str) -> List[int]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    hits = []
+                    for row in self._slot_rows(cursor):
+                        if row.get("model") == key:
+                            hits.append(row["id"])
+                            continue
+                        dual = self._json_or_default(row.get("dual_config"), {})
+                        m2 = (dual.get("model2") or {}).get("model")
+                        if m2 == key:
+                            hits.append(row["id"])
+                    return hits
+        except pymysql.Error as e:
+            logger.error(f"find_slots_referencing_model_key 失败: {e}")
+            raise RuntimeError(f"检查模型引用失败: {e}")
+
+    def find_slots_referencing_provider_slug(self, slug: str) -> List[int]:
+        prefix = f"{slug}:"
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    hits = []
+                    for row in self._slot_rows(cursor):
+                        model = row.get("model") or ""
+                        if model.startswith(prefix):
+                            hits.append(row["id"])
+                            continue
+                        dual = self._json_or_default(row.get("dual_config"), {})
+                        m2 = (dual.get("model2") or {}).get("model") or ""
+                        if m2.startswith(prefix):
+                            hits.append(row["id"])
+                    return hits
+        except pymysql.Error as e:
+            logger.error(f"find_slots_referencing_provider_slug 失败: {e}")
+            raise RuntimeError(f"检查供应商引用失败: {e}")
+
+    def rewrite_model_key_in_slots(self, old_key: str, new_key: str) -> None:
+        if not old_key or old_key == new_key:
+            return
+        now = self._now()
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE slots SET model = %s, updated_at = %s WHERE model = %s",
+                        (new_key, now, old_key),
+                    )
+                    for row in self._slot_rows(cursor):
+                        dual = self._json_or_default(row.get("dual_config"), {})
+                        m2 = dual.get("model2") if isinstance(dual.get("model2"), dict) else None
+                        if m2 and m2.get("model") == old_key:
+                            m2["model"] = new_key
+                            dual["model2"] = m2
+                            cursor.execute(
+                                "UPDATE slots SET dual_config = %s, updated_at = %s WHERE id = %s",
+                                (json.dumps(dual), now, row["id"]),
+                            )
+        except pymysql.Error as e:
+            logger.error(f"rewrite_model_key_in_slots 失败: {e}")
+            raise RuntimeError(f"同步存档模型引用失败: {e}")
+
+    def create_provider(
+        self,
+        slug: str,
+        display_name: str,
+        base_url: str,
+        api_key: str = "",
+        use_env_key: bool = False,
+        api_key_env: str = "",
+        models: Optional[List[Dict]] = None,
+    ) -> Dict:
+        now = self._now()
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT COALESCE(MAX(sort_order), 0) AS m FROM providers")
+                    max_order = (cursor.fetchone() or {}).get("m") or 0
+                    cursor.execute(
+                        "INSERT INTO providers "
+                        "(slug, display_name, base_url, api_key, use_env_key, api_key_env, "
+                        "sort_order, created_at, updated_at) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        (
+                            slug, display_name, base_url, api_key or "",
+                            1 if use_env_key else 0, api_key_env or "",
+                            int(max_order) + 1, now, now,
+                        ),
+                    )
+                    provider_id = cursor.lastrowid
+                    for item in models or []:
+                        mid = (item.get("model_id") or "").strip()
+                        if not mid:
+                            continue
+                        dname = (item.get("display_name") or "").strip()
+                        cursor.execute(
+                            "INSERT INTO catalog_models (provider_id, model_id, display_name) "
+                            "VALUES (%s, %s, %s)",
+                            (provider_id, mid, dname),
+                        )
+            created = self.get_provider(provider_id)
+            if not created:
+                raise RuntimeError("创建供应商后读取失败")
+            return created
+        except pymysql.IntegrityError as e:
+            logger.warning(f"create_provider 冲突: {e}")
+            raise ValueError("duplicate") from e
+        except pymysql.Error as e:
+            logger.error(f"create_provider 失败: {e}")
+            raise RuntimeError(f"创建供应商失败: {e}")
+
+    def update_provider(
+        self,
+        provider_id: int,
+        display_name: Optional[str] = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        use_env_key: Optional[bool] = None,
+        api_key_env: Optional[str] = None,
+    ) -> Optional[Dict]:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM providers WHERE id = %s", (provider_id,))
+                    if not cursor.fetchone():
+                        return None
+                    parts = []
+                    values: list = []
+                    if display_name is not None:
+                        parts.append("display_name = %s")
+                        values.append(display_name)
+                    if base_url is not None:
+                        parts.append("base_url = %s")
+                        values.append(base_url)
+                    if api_key is not None:
+                        parts.append("api_key = %s")
+                        values.append(api_key)
+                    if use_env_key is not None:
+                        parts.append("use_env_key = %s")
+                        values.append(1 if use_env_key else 0)
+                    if api_key_env is not None:
+                        parts.append("api_key_env = %s")
+                        values.append(api_key_env)
+                    if not parts:
+                        pass
+                    else:
+                        parts.append("updated_at = %s")
+                        values.append(self._now())
+                        values.append(provider_id)
+                        cursor.execute(
+                            f"UPDATE providers SET {', '.join(parts)} WHERE id = %s",
+                            values,
+                        )
+            return self.get_provider(provider_id)
+        except pymysql.Error as e:
+            logger.error(f"update_provider({provider_id}) 失败: {e}")
+            raise RuntimeError(f"更新供应商失败: {e}")
+
+    def delete_provider(self, provider_id: int) -> bool:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM providers WHERE id = %s", (provider_id,))
+                    return cursor.rowcount > 0
+        except pymysql.Error as e:
+            logger.error(f"delete_provider({provider_id}) 失败: {e}")
+            raise RuntimeError(f"删除供应商失败: {e}")
+
+    def add_catalog_model(self, provider_id: int, model_id: str, display_name: str = "") -> Dict:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id FROM providers WHERE id = %s", (provider_id,))
+                    if not cursor.fetchone():
+                        raise ValueError("provider_not_found")
+                    cursor.execute(
+                        "INSERT INTO catalog_models (provider_id, model_id, display_name) "
+                        "VALUES (%s, %s, %s)",
+                        (provider_id, model_id, display_name),
+                    )
+                    new_id = cursor.lastrowid
+            row = self.get_catalog_model(new_id)
+            if not row:
+                raise RuntimeError("创建模型后读取失败")
+            return row
+        except ValueError:
+            raise
+        except pymysql.IntegrityError as e:
+            raise ValueError("duplicate_model") from e
+        except pymysql.Error as e:
+            logger.error(f"add_catalog_model 失败: {e}")
+            raise RuntimeError(f"添加模型失败: {e}")
+
+    def update_catalog_model(
+        self,
+        model_row_id: int,
+        model_id: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> Optional[Dict]:
+        existing = self.get_catalog_model(model_row_id)
+        if existing is None:
+            return None
+        old_key = self.model_key(existing.get("slug") or "", existing.get("model_id") or "")
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    parts = []
+                    values: list = []
+                    if model_id is not None:
+                        parts.append("model_id = %s")
+                        values.append(model_id)
+                    if display_name is not None:
+                        parts.append("display_name = %s")
+                        values.append(display_name)
+                    if parts:
+                        values.append(model_row_id)
+                        cursor.execute(
+                            f"UPDATE catalog_models SET {', '.join(parts)} WHERE id = %s",
+                            values,
+                        )
+        except pymysql.IntegrityError as e:
+            raise ValueError("duplicate_model") from e
+        except pymysql.Error as e:
+            logger.error(f"update_catalog_model 失败: {e}")
+            raise RuntimeError(f"更新模型失败: {e}")
+        updated = self.get_catalog_model(model_row_id)
+        if updated and model_id is not None:
+            new_key = self.model_key(updated.get("slug") or "", updated.get("model_id") or "")
+            self.rewrite_model_key_in_slots(old_key, new_key)
+        return updated
+
+    def delete_catalog_model(self, model_row_id: int) -> bool:
+        try:
+            with self._transaction() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM catalog_models WHERE id = %s", (model_row_id,))
+                    return cursor.rowcount > 0
+        except pymysql.Error as e:
+            logger.error(f"delete_catalog_model 失败: {e}")
+            raise RuntimeError(f"删除模型失败: {e}")

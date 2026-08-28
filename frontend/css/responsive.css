@@ -73,6 +73,11 @@
     right: 208px;
   }
 
+  #catalog-btn-slot {
+    right: 310px;
+    padding: 5px 10px;
+  }
+
   #chat-messages {
     padding: 16px 14px;
     gap: 16px;

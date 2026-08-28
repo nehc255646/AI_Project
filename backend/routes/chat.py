@@ -13,8 +13,8 @@ from typing import AsyncGenerator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from config import MODEL_CONFIG, CONTEXT_WINDOW_SIZE
-from helpers import resolve_slot, error
+from config import CONTEXT_WINDOW_SIZE
+from helpers import resolve_slot, error, get_runtime
 from models import ChatRequest
 from state import get_ai_client, get_slot_mgr
 
@@ -198,8 +198,8 @@ async def _stream_dual_turn(
                 role_name = model2_name
                 role_icon = MODEL2_ICON
 
-            cfg = MODEL_CONFIG.get(cfg_key)
-            max_tokens = cfg.get("max_tokens") if cfg else None
+            rt = get_runtime(cfg_key, http=False)
+            max_tokens = rt.get("max_tokens")
 
             # ── 构建消息上下文 ──
             if is_current_first:
@@ -235,8 +235,12 @@ async def _stream_dual_turn(
             chunks = []
             try:
                 async for chunk in get_ai_client().stream_chat(
-                    messages, cfg_key, api_key=cfg_key_raw,
-                    max_tokens=max_tokens, params=cfg_params,
+                    messages,
+                    model_id=rt["model_id"],
+                    base_url=rt["base_url"],
+                    api_key=rt["api_key"],
+                    max_tokens=max_tokens,
+                    params=cfg_params,
                 ):
                     chunks.append(chunk)
                     yield _sse({'type': 'chunk', 'content': chunk, 'role': role})
@@ -371,11 +375,10 @@ async def chat(req: ChatRequest):
                 history.append({"role": "user", "content": user_content})
                 actual_model = model
                 actual_prompt = system_prompt
-                actual_key = api_key
                 actual_params = params
 
-                cfg = MODEL_CONFIG.get(actual_model)
-                max_tokens = cfg.get("max_tokens") if cfg else None
+                rt = get_runtime(actual_model, http=False)
+                max_tokens = rt.get("max_tokens")
 
                 context_history = (
                     history[-CONTEXT_WINDOW_SIZE:]
@@ -396,8 +399,12 @@ async def chat(req: ChatRequest):
                     rollback_start_id = saved_ids[0]
 
                 async for chunk in get_ai_client().stream_chat(
-                    messages, actual_model, api_key=actual_key,
-                    max_tokens=max_tokens, params=actual_params,
+                    messages,
+                    model_id=rt["model_id"],
+                    base_url=rt["base_url"],
+                    api_key=rt["api_key"],
+                    max_tokens=max_tokens,
+                    params=actual_params,
                 ):
                     chunks.append(chunk)
                     yield _sse({'type': 'chunk', 'content': chunk})
@@ -533,11 +540,10 @@ async def continue_chat(slot_index: int):
 
     cfg_key = data.get("model", "") or ""
     cfg_system = data.get("system_prompt") or "使用中文回答"
-    cfg_key_raw = data.get("api_key") or ""
     cfg_params = data.get("params") or {}
 
-    cfg = MODEL_CONFIG.get(cfg_key)
-    max_tokens = cfg.get("max_tokens") if cfg else None
+    rt = get_runtime(cfg_key, http=True)
+    max_tokens = rt.get("max_tokens")
 
     # 上下文：历史（截断到窗口，含最后一条 assistant）+ 继续指令（仅本次请求，不入库）
     context_history = (
@@ -561,8 +567,12 @@ async def continue_chat(slot_index: int):
 
             chunks = []
             async for chunk in get_ai_client().stream_chat(
-                messages, cfg_key, api_key=cfg_key_raw,
-                max_tokens=max_tokens, params=cfg_params,
+                messages,
+                model_id=rt["model_id"],
+                base_url=rt["base_url"],
+                api_key=rt["api_key"],
+                max_tokens=max_tokens,
+                params=cfg_params,
             ):
                 chunks.append(chunk)
                 yield _sse({'type': 'chunk', 'content': chunk, 'role': 'single'})

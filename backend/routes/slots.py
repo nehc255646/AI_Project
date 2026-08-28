@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from config import SLOT_COUNT, MODEL_CONFIG
+from config import SLOT_COUNT
 from models import (
     CreateSlotRequest,
     DeleteMessageRequest,
@@ -19,7 +19,7 @@ from models import (
     ImportSlotRequest,
     UpdateSlotRequest,
 )
-from helpers import error, resolve_slot, check_api_key, validate_model_key
+from helpers import error, resolve_slot, validate_model_key
 from state import get_slot_mgr
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,7 @@ def create_slot(slot_index: int, req: CreateSlotRequest):
     if get_slot_mgr().get_slot(slot_index) is not None:
         error("slot_in_use", f"存档位 #{slot_index + 1} 已被使用", 409)
 
-    cfg = validate_model_key(req.model)
-    check_api_key(cfg["provider"], req.api_key)
+    validate_model_key(req.model)
 
     # 构建 dual_config
     dual_config = None
@@ -58,8 +57,7 @@ def create_slot(slot_index: int, req: CreateSlotRequest):
         m2 = req.model2
         if not m2:
             error("missing_model2", "双模型配置缺少模型 2", 400)
-        m2_cfg = validate_model_key(m2.model)
-        check_api_key(m2_cfg["provider"], m2.api_key)
+        validate_model_key(m2.model)
         dual_config = {
             "enabled": True,
             "response_mode": "both",
@@ -76,7 +74,7 @@ def create_slot(slot_index: int, req: CreateSlotRequest):
         }
 
     success = get_slot_mgr().create_slot(
-        slot_index, req.model, req.system_prompt, req.api_key,
+        slot_index, req.model, req.system_prompt, "",
         req.params.model_dump() if req.params else None, req.title,
         dual_config=dual_config,
     )
@@ -207,30 +205,13 @@ def update_slot_title(slot_index: int, req: TitleUpdateRequest):
 
 @router.patch("/api/slots/{slot_index}/api-key")
 def update_slot_api_key(slot_index: int, req: ApiKeyUpdateRequest):
-    """更新存档的 API Key（连接失败后补填用）。
-
-    主模型密钥写入 slot.api_key；双模型的模型2密钥写入 dual_config。
-    """
-    data = resolve_slot(slot_index)
-    api_key = req.api_key.strip()
-    if not api_key:
-        error("empty_api_key", "API Key 不能为空", 400)
-
-    if req.target not in ("model1", "model2"):
-        error("invalid_key_target", "API Key 所属模型无效", 400)
-
-    if req.target == "model2":
-        dual_config = data.get("dual_config", {}) or {}
-        if not dual_config.get("enabled") or not dual_config.get("model2"):
-            error("model2_not_found", "模型 2 配置不存在", 400)
-        dual_config["model2"]["api_key"] = api_key
-        if not get_slot_mgr().update_dual_config(slot_index, dual_config):
-            error("update_failed", "API Key 更新失败", 500)
-        return {"ok": True}
-
-    if not get_slot_mgr().update_slot_meta(slot_index, {"api_key": api_key}):
-        error("update_failed", "API Key 更新失败", 500)
-    return {"ok": True}
+    """已废弃：密钥改在「模型配置」中按供应商管理。"""
+    resolve_slot(slot_index)
+    error(
+        "gone",
+        "密钥已改为在「模型配置」中按供应商管理，请到右上角打开模型配置",
+        410,
+    )
 
 
 @router.patch("/api/slots/{slot_index}/dual-toggle")
@@ -306,25 +287,12 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
     # ——— 模型1（或单模型） ———
     # model
     if req.model is not None:
-        cfg = validate_model_key(req.model)
-        # 密钥有效性：若请求同时带了 api_key 则用新的，否则用存档旧的
-        effective_key = req.api_key if req.api_key is not None else data.get("api_key", "")
-        # check_api_key 内部会优先检查环境变量
-        check_api_key(cfg["provider"], effective_key if effective_key is not None else "")
+        validate_model_key(req.model)
         new_model = req.model
 
-    # api_key（仅在未随 model 一起校验时需要单独校验）
+    # 存档级密钥已废弃，忽略客户端传入的 api_key
     if req.api_key is not None:
-        # 去空白
-        provided_key = req.api_key.strip() if isinstance(req.api_key, str) else ""
-        if req.model is None:
-            # 未更换模型，仅更换密钥：用现有模型校验
-            cur_model = data.get("model", "")
-            if cur_model:
-                cfg_cur = validate_model_key(cur_model)
-                check_api_key(cfg_cur["provider"], provided_key)
-            # 若存档无模型（异常情况），则跳过校验，直接存储
-        new_api_key = provided_key
+        new_api_key = None
 
     # system_prompt
     if req.system_prompt is not None:
@@ -362,26 +330,14 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
         # model2 嵌套独立更新
         if req.model2 is not None:
             m2 = req.model2
-            existing_m2 = dual_raw.get("model2") or {}
             # model
             if m2.model is not None:
-                cfg2 = validate_model_key(m2.model)
-                effective_m2_key = m2.api_key if m2.api_key is not None else existing_m2.get("api_key", "")
-                check_api_key(cfg2["provider"], effective_m2_key if effective_m2_key is not None else "")
+                validate_model_key(m2.model)
                 new_dual["model2"]["model"] = m2.model
             # system_prompt
             if m2.system_prompt is not None:
                 new_dual["model2"]["system_prompt"] = m2.system_prompt
-            # api_key
-            if m2.api_key is not None:
-                provided_m2_key = m2.api_key.strip() if isinstance(m2.api_key, str) else ""
-                if m2.model is None:
-                    # 未同时更换模型，仅换密钥：用现有模型校验
-                    cur_m2_model = existing_m2.get("model", "")
-                    if cur_m2_model:
-                        cfg2_cur = validate_model_key(cur_m2_model)
-                        check_api_key(cfg2_cur["provider"], provided_m2_key)
-                new_dual["model2"]["api_key"] = provided_m2_key
+            # api_key 已废弃，忽略
             # params
             if m2.params is not None:
                 new_dual["model2"]["params"] = m2.params.model_dump()
@@ -436,11 +392,11 @@ def export_backup(slot_index: int):
     """导出可完整恢复存档的 JSON 备份。"""
     data = resolve_slot(slot_index)
     return {
-        "version": 1,
+        "version": 2,
         "index": slot_index,
         "model": data.get("model", ""),
         "system_prompt": data.get("system_prompt", ""),
-        "api_key": data.get("api_key", ""),
+        "api_key": "",
         "title": data.get("title", ""),
         "params": data.get("params", {}) or {},
         "dual_config": data.get("dual_config", {}) or {},
@@ -457,16 +413,16 @@ def import_backup(slot_index: int, req: ImportSlotRequest):
     if mgr.get_slot(slot_index) is not None:
         error("slot_in_use", f"存档位 #{slot_index + 1} 已被使用", 409)
 
-    cfg = validate_model_key(req.model)
-    check_api_key(cfg["provider"], req.api_key)
+    validate_model_key(req.model)
     dual_config = req.dual_config.model_dump() if req.dual_config else {}
     if dual_config.get("enabled"):
         model2 = dual_config.get("model2") or {}
-        model2_cfg = validate_model_key(model2.get("model", ""))
-        check_api_key(model2_cfg["provider"], model2.get("api_key", ""))
+        validate_model_key(model2.get("model", ""))
+        if isinstance(dual_config.get("model2"), dict):
+            dual_config["model2"]["api_key"] = ""
 
     if not mgr.create_slot(
-        slot_index, req.model, req.system_prompt, req.api_key,
+        slot_index, req.model, req.system_prompt, "",
         req.params.model_dump() if req.params else None,
         req.title, dual_config=dual_config,
     ):

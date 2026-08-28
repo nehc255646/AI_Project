@@ -1,7 +1,7 @@
 """
-全局配置 — 提供商、模型、数据库与默认生成参数。
+全局配置 — 数据库、槽位与默认生成参数。
 
-所有提供商均使用 OpenAI 兼容接口调用。
+模型目录由用户自行配置（OpenAI 兼容接口），保存在数据库中。
 """
 import os
 from pathlib import Path
@@ -14,73 +14,9 @@ FRONTEND_DIR = BASE_DIR.parent / "frontend"
 # 从项目根目录加载 .env
 load_dotenv(BASE_DIR.parent / ".env")
 
-# ── API 提供商配置 ──
-# base_url: OpenAI 兼容接口地址
-# api_key_env: 环境变量名（无则依赖创建存档时传入的密钥）
-# ollama_local 无需密钥，兼容端点要求占位 key
-PROVIDER_CONFIG = {
-    "deepseek": {
-        "name": "DeepSeek 官方",
-        "base_url": "https://api.deepseek.com",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "disable_thinking": {"extra_body": {"thinking": {"type": "disabled"}}},
-    },
-    "dashscope": {
-        "name": "阿里云百炼官方",
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key_env": "DASHSCOPE_API_KEY",
-        "disable_thinking": {"extra_body": {"enable_thinking": False}},
-    },
-    "ollama_cloud": {
-        "name": "Ollama Cloud",
-        "base_url": "https://ollama.com/v1",
-        "api_key_env": "OLLAMA_API_KEY",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-    "ollama_local": {
-        "name": "Ollama 本地",
-        "base_url": "http://127.0.0.1:11434/v1",
-        "api_key_env": "",
-        "dummy_api_key": "ollama",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-    "openai": {
-        "name": "OpenAI 官方",
-        "base_url": "https://api.openai.com/v1",
-        "api_key_env": "OPENAI_API_KEY",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-    "gemini": {
-        "name": "Gemini 官方",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api_key_env": "GEMINI_API_KEY",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-    "opencode": {
-        "name": "opencode go 订阅",
-        "base_url": "https://opencode.ai/zen/go/v1",
-        "api_key_env": "OPENCODE_API_KEY",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-    "opencode_zen": {
-        "name": "opencode Zen 免费",
-        "base_url": "https://opencode.ai/zen/v1",
-        "api_key_env": "OPENCODE_API_KEY",
-        "disable_thinking": {"reasoning_effort": "none"},
-    },
-}
-
-# 提供商展示顺序（前端提供商下拉的排序依据）
-PROVIDER_ORDER = [
-    "deepseek",
-    "dashscope",
-    "ollama_cloud",
-    "ollama_local",
-    "openai",
-    "gemini",
-    "opencode",
-    "opencode_zen",
-]
+# 无鉴权 OpenAI 兼容端点（如本地 Ollama）时客户端仍需要占位 key
+DUMMY_API_KEY = "sk-no-auth"
+DEFAULT_MAX_TOKENS = 8192
 
 # CORS 允许来源（逗号分隔，可通过 ALLOWED_ORIGINS 环境变量覆盖）
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "").strip()
@@ -130,60 +66,4 @@ DEFAULT_PARAMS = {
     "num_predict": 4096,
 }
 
-# ── 模型定义 ──
-# key 格式: "{provider}:{模型ID}"，模型 ID 为各提供商接口的真实模型名（可能含冒号）
-# provider: 对应 PROVIDER_CONFIG 中的键
-MODEL_CONFIG = {
-    # DeepSeek 官方
-    "deepseek:deepseek-v4-flash": {"provider": "deepseek", "id": "deepseek-v4-flash", "max_tokens": 8192},
-    "deepseek:deepseek-v4-pro": {"provider": "deepseek", "id": "deepseek-v4-pro", "max_tokens": 8192},
-    # 阿里云百炼官方
-    "dashscope:qwen-3.8-max": {"provider": "dashscope", "id": "qwen-3.8-max", "max_tokens": 8192},
-    "dashscope:qwen-3.7-max": {"provider": "dashscope", "id": "qwen-3.7-max", "max_tokens": 8192},
-    "dashscope:qwen-3.7-plus": {"provider": "dashscope", "id": "qwen-3.7-plus", "max_tokens": 8192},
-    "dashscope:deepseek-v4-flash": {"provider": "dashscope", "id": "deepseek-v4-flash", "max_tokens": 8192},
-    "dashscope:deepseek-v4-pro": {"provider": "dashscope", "id": "deepseek-v4-pro", "max_tokens": 8192},
-    "dashscope:GLM-5.2": {"provider": "dashscope", "id": "GLM-5.2", "max_tokens": 8192},
-    "dashscope:kimi-k3": {"provider": "dashscope", "id": "kimi-k3", "max_tokens": 8192},
-    # Ollama Cloud
-    "ollama_cloud:gemma4:31b-cloud": {"provider": "ollama_cloud", "id": "gemma4:31b-cloud", "max_tokens": 8192},
-    "ollama_cloud:nemotron-3-super:cloud": {"provider": "ollama_cloud", "id": "nemotron-3-super:cloud", "max_tokens": 8192},
-    "ollama_cloud:minimax-m2.5:cloud": {"provider": "ollama_cloud", "id": "minimax-m2.5:cloud", "max_tokens": 8192},
-    "ollama_cloud:glm-4.7:cloud": {"provider": "ollama_cloud", "id": "glm-4.7:cloud", "max_tokens": 8192},
-    "ollama_cloud:qwen3-next:80b-cloud": {"provider": "ollama_cloud", "id": "qwen3-next:80b-cloud", "max_tokens": 8192},
-    "ollama_cloud:devstral-2:123b-cloud": {"provider": "ollama_cloud", "id": "devstral-2:123b-cloud", "max_tokens": 8192},
-    "ollama_cloud:gpt-oss:120b-cloud": {"provider": "ollama_cloud", "id": "gpt-oss:120b-cloud", "max_tokens": 8192},
-    "ollama_cloud:qwen3-vl:235b-instruct-cloud": {"provider": "ollama_cloud", "id": "qwen3-vl:235b-instruct-cloud", "max_tokens": 8192},
-    "ollama_cloud:nemotron-3-ultra:cloud": {"provider": "ollama_cloud", "id": "nemotron-3-ultra:cloud", "max_tokens": 8192},
-    "ollama_cloud:minimax-m3:cloud": {"provider": "ollama_cloud", "id": "minimax-m3:cloud", "max_tokens": 8192},
-    # Ollama 本地
-    "ollama_local:qwen3.8:27b": {"provider": "ollama_local", "id": "qwen3.8:27b", "max_tokens": 8192},
-    "ollama_local:nemotron-3.5-lightning:30b": {"provider": "ollama_local", "id": "nemotron-3.5-lightning:30b", "max_tokens": 8192},
-    "ollama_local:muse-glimmer:30b": {"provider": "ollama_local", "id": "muse-glimmer:30b", "max_tokens": 8192},
-    "ollama_local:gemma4:e4b": {"provider": "ollama_local", "id": "gemma4:e4b", "max_tokens": 8192},
-    "ollama_local:gemma4:31b": {"provider": "ollama_local", "id": "gemma4:31b", "max_tokens": 8192},
-    # OpenAI 官方
-    "openai:gpt-5.6-luna": {"provider": "openai", "id": "gpt-5.6-luna", "max_tokens": 8192},
-    "openai:gpt-5.6-sol": {"provider": "openai", "id": "gpt-5.6-sol", "max_tokens": 8192},
-    "openai:gpt-5.6-terra": {"provider": "openai", "id": "gpt-5.6-terra", "max_tokens": 8192},
-    # Gemini 官方
-    "gemini:gemini-3.7-flash": {"provider": "gemini", "id": "gemini-3.7-flash", "max_tokens": 8192},
-    "gemini:gemini-3.6-flash": {"provider": "gemini", "id": "gemini-3.6-flash", "max_tokens": 8192},
-    # opencode go 订阅
-    "opencode:glm-5.3": {"provider": "opencode", "id": "glm-5.3", "max_tokens": 8192},
-    "opencode:glm-5.2": {"provider": "opencode", "id": "glm-5.2", "max_tokens": 8192},
-    "opencode:kimi-k3": {"provider": "opencode", "id": "kimi-k3", "max_tokens": 8192},
-    "opencode:kimi-k2.6": {"provider": "opencode", "id": "kimi-k2.6", "max_tokens": 8192},
-    "opencode:deepseek-v4-pro": {"provider": "opencode", "id": "deepseek-v4-pro", "max_tokens": 8192},
-    "opencode:deepseek-v4-flash": {"provider": "opencode", "id": "deepseek-v4-flash", "max_tokens": 8192},
-    "opencode:mimo-v2.5-pro": {"provider": "opencode", "id": "mimo-v2.5-pro", "max_tokens": 8192},
-    "opencode:mimo-v2.5": {"provider": "opencode", "id": "mimo-v2.5", "max_tokens": 8192},
-    "opencode:hy3": {"provider": "opencode", "id": "hy3", "max_tokens": 8192},
-    # opencode Zen 免费（OpenAI 兼容，base_url: https://opencode.ai/zen/v1/）
-    "opencode_zen:x-preview-f-free": {"provider": "opencode_zen", "id": "x-preview-f-free", "max_tokens": 8192},
-    "opencode_zen:mimo-v2.5-free": {"provider": "opencode_zen", "id": "mimo-v2.5-free", "max_tokens": 8192},
-    "opencode_zen:hy3-free": {"provider": "opencode_zen", "id": "hy3-free", "max_tokens": 8192},
-    "opencode_zen:nemotron-3-ultra-free": {"provider": "opencode_zen", "id": "nemotron-3-ultra-free", "max_tokens": 8192},
-    "opencode_zen:nemotron-3.5-lightning-free": {"provider": "opencode_zen", "id": "nemotron-3.5-lightning-free", "max_tokens": 8192},
-    "opencode_zen:muse-spark-1.2-contributor-free": {"provider": "opencode_zen", "id": "muse-spark-1.2-contributor-free", "max_tokens": 8192},
-}
+# 模型目录由用户在「模型配置」中维护，保存在 MySQL 的 providers / catalog_models 表。

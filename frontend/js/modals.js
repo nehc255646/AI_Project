@@ -52,13 +52,11 @@ function getParamValues(suffix = "") {
   };
 }
 
-function updateThinkingOption(modelSelectId, optionId, checkboxId) {
-  const modelKey = document.getElementById(modelSelectId)?.value || "";
-  const visible = modelKey.toLowerCase().includes("deepseek");
+function updateThinkingOption(_modelSelectId, optionId, checkboxId) {
   const option = document.getElementById(optionId);
   const checkbox = document.getElementById(checkboxId);
-  if (option) option.style.display = visible ? "block" : "none";
-  if (!visible && checkbox) checkbox.checked = false;
+  if (option) option.style.display = "none";
+  if (checkbox) checkbox.checked = false;
 }
 
 function showStep(step) {
@@ -151,28 +149,19 @@ function showStep(step) {
 
 // ── 提供商配置 ──
 
-const PROVIDER_META = {
-  deepseek: { label: "DeepSeek 官方" },
-  dashscope: { label: "阿里云百炼官方" },
-  ollama_cloud: { label: "Ollama Cloud" },
-  ollama_local: { label: "Ollama 本地", noKey: true },
-  openai: { label: "OpenAI 官方" },
-  gemini: { label: "Gemini 官方" },
-  opencode: { label: "opencode go 订阅" },
-  opencode_zen: { label: "opencode Zen 免费" },
-};
-const PROVIDER_ORDER = [
-  "deepseek", "dashscope", "ollama_cloud", "ollama_local",
-  "openai", "gemini", "opencode", "opencode_zen",
-];
-
 function providerSelectIdFor(modelSelectId) {
   return modelSelectId === "create-model2-select" ? "create-provider2-select" : "create-provider-select";
 }
 
 function getProviders() {
-  const set = new Set((state.models || []).map((m) => m.provider).filter(Boolean));
-  return PROVIDER_ORDER.filter((p) => set.has(p));
+  const seen = [];
+  const set = new Set();
+  for (const m of state.models || []) {
+    if (!m.provider || set.has(m.provider)) continue;
+    set.add(m.provider);
+    seen.push({ slug: m.provider, name: m.provider_name || m.provider });
+  }
+  return seen;
 }
 
 function populateModelSelect(selectId, selectedKey) {
@@ -185,7 +174,7 @@ function populateModelSelect(selectId, selectedKey) {
   list.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.key;
-    opt.textContent = m.id || m.key;
+    opt.textContent = m.display_name || m.id || m.key;
     if (m.key === selectedKey) opt.selected = true;
     if (firstKey === null) firstKey = m.key;
     select.appendChild(opt);
@@ -202,15 +191,16 @@ function populateProviderSelect(providerSelectId, modelSelectId, selectedKey) {
   pSelect.innerHTML = "";
   providers.forEach((p) => {
     const opt = document.createElement("option");
-    opt.value = p;
-    opt.textContent = (PROVIDER_META[p] || {}).label || p;
+    opt.value = p.slug;
+    opt.textContent = p.name;
     pSelect.appendChild(opt);
   });
+  const slugs = providers.map((p) => p.slug);
   const target = (state.models || []).find((m) => m.key === selectedKey);
-  if (target && providers.includes(target.provider)) {
+  if (target && slugs.includes(target.provider)) {
     pSelect.value = target.provider;
-  } else if (providers.length) {
-    pSelect.value = providers[0];
+  } else if (slugs.length) {
+    pSelect.value = slugs[0];
   }
   populateModelSelect(modelSelectId, selectedKey);
 }
@@ -228,6 +218,10 @@ function updateParamDisplays(suffix = "") {
 }
 
 export async function openCreateModal(index) {
+  if (!(state.models || []).length) {
+    showToast("请先在右上角「模型配置」中添加供应商和模型", "warning");
+    return;
+  }
   pendingCreateIndex = index;
   isDualMode = false;
   isEditMode = false;
@@ -249,8 +243,9 @@ export async function openCreateModal(index) {
   document.getElementById("step1-title").textContent = "选择模型";
 
   // 填充模型下拉框
-  populateProviderSelect("create-provider-select", "create-model-select", "deepseek:deepseek-v4-flash");
-  populateProviderSelect("create-provider2-select", "create-model2-select", "deepseek:deepseek-v4-flash");
+  const defaultKey = (state.models[0] && state.models[0].key) || "";
+  populateProviderSelect("create-provider-select", "create-model-select", defaultKey);
+  populateProviderSelect("create-provider2-select", "create-model2-select", defaultKey);
 
   // 重置值
   document.getElementById("create-model1-name").value = "";
@@ -385,7 +380,7 @@ export async function openEditModal() {
     if (!Array.from(p1Select.options).some(o => o.value === m1Provider)) {
       const opt = document.createElement("option");
       opt.value = m1Provider;
-      opt.textContent = (PROVIDER_META[m1Provider] || {}).label || m1Provider;
+      opt.textContent = (state.models.find((m) => m.provider === m1Provider)?.provider_name) || m1Provider;
       p1Select.appendChild(opt);
     }
     p1Select.value = m1Provider;
@@ -443,7 +438,7 @@ export async function openEditModal() {
       if (!Array.from(p2Select.options).some(o => o.value === m2Provider)) {
         const opt = document.createElement("option");
         opt.value = m2Provider;
-        opt.textContent = (PROVIDER_META[m2Provider] || {}).label || m2Provider;
+        opt.textContent = (state.models.find((m) => m.provider === m2Provider)?.provider_name) || m2Provider;
         p2Select.appendChild(opt);
       }
       p2Select.value = m2Provider;
@@ -489,72 +484,13 @@ export async function openEditModal() {
 }
 
 export function updateApiKeyField() {
-  const select = document.getElementById("create-model-select");
   const field = document.getElementById("api-key-field");
-  const label = document.getElementById("api-key-label");
-  const input = document.getElementById("create-api-key");
-
-  const modelKey = select.value;
-  const model = state.models.find((m) => m.key === modelKey);
-  if (!model) return;
-
-  const provider = model.provider || "";
-  const meta = PROVIDER_META[provider] || {};
-  const hasEnv = state.envStatus[provider] === true;
-  if (hasEnv || meta.noKey) {
-    field.style.display = "none";
-    if (!isEditMode) input.value = "";
-    input.required = false;
-    // 编辑模式下清空已输入的 key（避免误提交旧 key）
-    if (isEditMode && field.style.display === "none") {
-      input.value = "";
-    }
-  } else {
-    field.style.display = "block";
-    const name = meta.label || provider;
-    label.textContent = `${name} API 密钥`;
-    if (isEditMode) {
-      input.placeholder = `留空保持不变，输入新 ${name} Key 则更换`;
-      input.required = false;
-    } else {
-      input.placeholder = `请输入你的 ${name} API Key`;
-      input.required = true;
-    }
-  }
+  if (field) field.style.display = "none";
 }
 
 export function updateApiKeyField2() {
-  const select = document.getElementById("create-model2-select");
   const field = document.getElementById("api-key-field-2");
-  const label = document.getElementById("api-key-label-2");
-  const input = document.getElementById("create-api-key-2");
-
-  const modelKey = select.value;
-  const model = state.models.find((m) => m.key === modelKey);
-  if (!model) return;
-
-  const provider = model.provider || "";
-  const meta = PROVIDER_META[provider] || {};
-  const hasEnv = state.envStatus[provider] === true;
-  if (hasEnv || meta.noKey) {
-    field.style.display = "none";
-    if (!isEditMode) input.value = "";
-    input.required = false;
-    if (isEditMode && field.style.display === "none") {
-      input.value = "";
-    }
-  } else {
-    field.style.display = "block";
-    const name = meta.label || provider;
-    label.textContent = `${name} API 密钥`;
-    if (isEditMode) {
-      input.placeholder = `留空保持不变，输入新 ${name} Key 则更换`;
-      input.required = false;
-    } else {
-      input.placeholder = `请输入你的 ${name} API Key`;
-      input.required = true;
-    }
-  }
+  if (field) field.style.display = "none";
 }
 
 // ── 导出弹窗 ──
@@ -739,15 +675,10 @@ export function initModalListeners() {
       return;
     }
     if (currentStep === 1) {
-      // 步骤 1 → 步骤 2（校验 API Key — 编辑模式下留空表示保持不变，不强制）
-      if (!isEditMode) {
-        const apiKeyField = document.getElementById("api-key-field");
-        const apiKeyInput = document.getElementById("create-api-key");
-        if (apiKeyField.style.display !== "none" && !apiKeyInput.value.trim()) {
-          showToast("请填写该模型所需的 API 密钥", "warning");
-          apiKeyInput.focus();
-          return;
-        }
+      const modelVal = document.getElementById("create-model-select")?.value;
+      if (!modelVal) {
+        showToast("请选择模型，若没有可选项请先到右上角「模型配置」添加", "warning");
+        return;
       }
       showStep(2);
     } else if (currentStep === 2) {
@@ -762,15 +693,10 @@ export function initModalListeners() {
       }
     } else if (currentStep === 3) {
       if (isDualMode) {
-        // 校验模型2 API Key — 编辑模式下不强制
-        if (!isEditMode) {
-          const apiKeyField2 = document.getElementById("api-key-field-2");
-          const apiKeyInput2 = document.getElementById("create-api-key-2");
-          if (apiKeyField2.style.display !== "none" && !apiKeyInput2.value.trim()) {
-            showToast("请填写模型 2 所需的 API 密钥", "warning");
-            apiKeyInput2.focus();
-            return;
-          }
+        const model2Val = document.getElementById("create-model2-select")?.value;
+        if (!model2Val) {
+          showToast("请选择模型 2，若没有可选项请先到右上角「模型配置」添加", "warning");
+          return;
         }
         showStep(4);
       }
@@ -807,16 +733,12 @@ export function initModalListeners() {
         const model1NameRaw = document.getElementById("create-model1-name").value.trim();
         const model1Prompt = document.getElementById("create-system-prompt").value.trim() || "使用中文回答";
         const model1Params = getParamValues("");
-        const api1Field = document.getElementById("api-key-field");
-        const model1KeyRaw = api1Field.style.display !== "none" ? document.getElementById("create-api-key").value.trim() : "";
 
         const model2Select = document.getElementById("create-model2-select");
         const model2Model = model2Select.value;
         const model2NameRaw = document.getElementById("create-model2-name").value.trim();
         const model2Prompt = document.getElementById("create-system-prompt-2").value.trim() || "使用中文回答";
         const model2Params = getParamValues("2");
-        const api2Field = document.getElementById("api-key-field-2");
-        const model2KeyRaw = api2Field.style.display !== "none" ? document.getElementById("create-api-key-2").value.trim() : "";
 
         const titleRaw = document.getElementById("create-title-dual").value.trim();
         const passMode = document.querySelector('input[name="pass-mode"]:checked')?.value || "user";
@@ -835,8 +757,6 @@ export function initModalListeners() {
             params: model2Params,
           },
         };
-        if (model1KeyRaw !== "") payload.api_key = model1KeyRaw;
-        if (model2KeyRaw !== "") payload.model2.api_key = model2KeyRaw;
         if (titleRaw !== "") payload.title = titleRaw;
 
         try {
@@ -857,13 +777,11 @@ export function initModalListeners() {
         // 单模型更换
         const select = document.getElementById("create-model-select");
         const promptInput = document.getElementById("create-system-prompt-single");
-        const apiKeyField = document.getElementById("api-key-field");
         const titleInput = document.getElementById("create-title");
 
         const model = select.value;
         const systemPrompt = promptInput.value.trim() || "使用中文回答";
         const params = getParamValues("");
-        const apiKeyRaw = apiKeyField.style.display !== "none" ? document.getElementById("create-api-key").value.trim() : "";
         const titleRaw = titleInput.value.trim();
 
         const payload = {
@@ -871,7 +789,6 @@ export function initModalListeners() {
           system_prompt: systemPrompt,
           params,
         };
-        if (apiKeyRaw !== "") payload.api_key = apiKeyRaw;
         if (titleRaw !== "") payload.title = titleRaw;
 
         try {
@@ -899,16 +816,12 @@ export function initModalListeners() {
       const model1Select = document.getElementById("create-model-select");
       const model1Name = document.getElementById("create-model1-name").value.trim() || "1号";
       const model1Model = model1Select.value;
-      const model1Key = document.getElementById("api-key-field").style.display !== "none"
-        ? document.getElementById("create-api-key").value.trim() : "";
       const model1Prompt = document.getElementById("create-system-prompt").value.trim() || "使用中文回答";
       const model1Params = getParamValues("");
 
       const model2Select = document.getElementById("create-model2-select");
       const model2Name = document.getElementById("create-model2-name").value.trim() || "2号";
       const model2Model = model2Select.value;
-      const model2Key = document.getElementById("api-key-field-2").style.display !== "none"
-        ? document.getElementById("create-api-key-2").value.trim() : "";
       const model2Prompt = document.getElementById("create-system-prompt-2").value.trim() || "使用中文回答";
       const model2Params = getParamValues("2");
 
@@ -916,7 +829,6 @@ export function initModalListeners() {
         await apiPost(`/api/slots/${idx}`, {
           model: model1Model,
           system_prompt: model1Prompt,
-          api_key: model1Key,
           params: model1Params,
           title: document.getElementById("create-title-dual").value.trim(),
           dual_enabled: true,
@@ -926,7 +838,6 @@ export function initModalListeners() {
           model2: {
             model: model2Model,
             system_prompt: model2Prompt,
-            api_key: model2Key,
             params: model2Params,
           },
         });
@@ -940,19 +851,15 @@ export function initModalListeners() {
       // ── 单模型创建 ──
       const select = document.getElementById("create-model-select");
       const promptInput = document.getElementById("create-system-prompt-single");
-      const apiKeyInput = document.getElementById("create-api-key");
-      const apiKeyField = document.getElementById("api-key-field");
       const titleInput = document.getElementById("create-title");
 
       const model = select.value;
       const systemPrompt = promptInput.value.trim() || "使用中文回答";
-      const apiKey = apiKeyField.style.display !== "none" ? apiKeyInput.value.trim() : "";
 
       try {
         await apiPost(`/api/slots/${idx}`, {
           model,
           system_prompt: systemPrompt,
-          api_key: apiKey,
           title: titleInput.value.trim(),
           params: getParamValues(""),
         });

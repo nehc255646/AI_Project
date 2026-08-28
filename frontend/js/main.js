@@ -20,7 +20,8 @@ import {
 } from "./ui.js";
 
 // ── 弹窗 ──
-import { initModalListeners, updateApiKeyField, closeCreateModal, openHelpModal, closeHelpModal, openExportModal, exportSlotBackup, importSlotBackup, openEditModal } from "./modals.js";
+import { initModalListeners, closeCreateModal, openHelpModal, closeHelpModal, openExportModal, exportSlotBackup, importSlotBackup, openEditModal } from "./modals.js";
+import { initCatalog, bindCatalogUi, closeCatalogModal } from "./catalog.js";
 
 // ── 对话 ──
 import { sendMessage, cancelStream, backToSlots, clearSlotChat, regenerate, setDualResponseMode, continueLastReply } from "./chat.js";
@@ -42,32 +43,9 @@ import { initBackground, refreshBackgroundPanel } from "./background.js";
 async function init() {
   initTheme();
   initBackground();
-  await loadModels();
+  await initCatalog();
   await loadEnvStatus();
   await loadSlots();
-}
-
-async function loadModels() {
-  try {
-    state.models = await apiGet("/api/models");
-  } catch (_) {
-    // 兜底：后端不可用时的备用模型列表，需与 backend/config.py 的 MODEL_CONFIG 保持一致
-    state.models = [
-      { key: "deepseek:deepseek-v4-flash", id: "deepseek-v4-flash", provider: "deepseek" },
-      { key: "deepseek:deepseek-v4-pro", id: "deepseek-v4-pro", provider: "deepseek" },
-      { key: "dashscope:qwen-3.8-max", id: "qwen-3.8-max", provider: "dashscope" },
-      { key: "dashscope:qwen-3.7-max", id: "qwen-3.7-max", provider: "dashscope" },
-      { key: "ollama_cloud:minimax-m3:cloud", id: "minimax-m3:cloud", provider: "ollama_cloud" },
-      { key: "ollama_local:qwen3.8:27b", id: "qwen3.8:27b", provider: "ollama_local" },
-      { key: "openai:gpt-5.6-luna", id: "gpt-5.6-luna", provider: "openai" },
-      { key: "gemini:gemini-3.7-flash", id: "gemini-3.7-flash", provider: "gemini" },
-      { key: "opencode:glm-5.3", id: "glm-5.3", provider: "opencode" },
-      { key: "opencode_zen:x-preview-f-free", id: "x-preview-f-free", provider: "opencode_zen" },
-      { key: "opencode_zen:mimo-v2.5-free", id: "mimo-v2.5-free", provider: "opencode_zen" },
-      { key: "opencode_zen:muse-spark-1.2-contributor-free", id: "muse-spark-1.2-contributor-free", provider: "opencode_zen" },
-    ];
-  }
-  updateApiKeyField(); // 使用当前选中的模型更新 API Key 字段
 }
 
 async function loadEnvStatus() {
@@ -107,6 +85,8 @@ function setupEventListeners() {
   $("#help-btn-chat").addEventListener("click", openHelpModal);
   $("#help-close-btn").addEventListener("click", closeHelpModal);
   $("#help-got-it").addEventListener("click", closeHelpModal);
+
+  bindCatalogUi();
 
   // 主题（宫格页与聊天页右上角按钮 + 弹层关闭）
   const openThemeWithBg = () => {
@@ -155,6 +135,12 @@ function setupEventListeners() {
     const helpModal = document.getElementById("help-modal");
     if (!helpModal.classList.contains("hidden")) {
       closeHelpModal();
+      return;
+    }
+
+    const catalogModal = document.getElementById("catalog-modal");
+    if (catalogModal && !catalogModal.classList.contains("hidden")) {
+      closeCatalogModal();
       return;
     }
 
