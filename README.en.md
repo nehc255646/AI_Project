@@ -1,6 +1,6 @@
 <div align="center">
 
-# AI Chat Agent · Slot Edition
+# Nehchat Agent · Slot Edition
 
 **10 Independent Save Slots · Single / Dual-Model Role-Play · SSE Streaming · Self-Managed OpenAI-Compatible Model Catalog**
 

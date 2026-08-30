@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title AI Chat Agent
+title Nehchat Agent
 cd /d "%~dp0"
 
 echo [1/3] Checking Python...

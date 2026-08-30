@@ -1,5 +1,5 @@
 """
-FastAPI 服务入口 — AI 对话智能体。
+FastAPI 服务入口 — Nehchat Agent。
 
 负责初始化中间件、注册路由并托管前端静态文件。
 """
@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
     logger.info("服务已关闭")
 
 
-app = FastAPI(title="AI 对话智能体 - 存档版", lifespan=lifespan)
+app = FastAPI(title="Nehchat Agent - 存档版", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
