@@ -1,161 +1,322 @@
-# AI 对话智能体 — 存档版
+<div align="center">
 
-> 10 个独立存档位 · 单模型 / 双模型 Role-Play · 流式 SSE · 用户自建 OpenAI 兼容供应商目录
+# AI Chat Agent · 存档版
 
-一个开箱即用的本地 AI 对话应用：在「模型配置」里自行添加 OpenAI 兼容供应商、密钥与模型，存档只从目录中选择。支持单聊与双模型依次对话，完整存档备份与恢复。前端 Vite + 原生 JS，后端 FastAPI + MySQL。
+**10 个独立存档位 · 单 / 双模型 Role-Play · SSE 流式对话 · 自建 OpenAI 兼容模型目录**
+
+[简体中文](./README.md) · [English](./README.en.md)
+
+![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-latest-009688?logo=fastapi&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Streaming](https://img.shields.io/badge/Streaming-SSE-f97316)
+
+</div>
 
 ---
 
+一个开箱即用的本地 AI 对话应用：在「模型配置」中自行添加任意 OpenAI 兼容供应商与模型，通过 10 个存档位管理多段独立对话。支持单模型直聊与双模型角色扮演（两模型依次回复、互相接力），对话全程 SSE 流式输出、落库 MySQL，并配备主题换肤、自定义背景图、Markdown 渲染与完整备份恢复。
+
+前端 Vite + 原生 JS，后端 FastAPI + MySQL，一键脚本启动，无需任何账号与鉴权配置（仅限本地使用）。
+
+## 目录
+
+- [功能特性](#-功能特性)
+- [系统架构](#️-系统架构)
+- [快速开始](#-快速开始)
+- [配置项](#️-配置项)
+- [供应商与模型](#️-供应商与模型)
+- [双模型 Role-Play](#-双模型-role-play)
+- [主题与背景](#-主题与背景)
+- [目录结构](#-目录结构)
+- [API 一览](#-api-一览)
+- [SSE 事件流](#-sse-事件流)
+- [开发指南](#️-开发指南)
+- [常见问题](#-常见问题)
+- [安全须知与许可](#-安全须知与许可)
+
 ## ✨ 功能特性
 
-- **10 存档位**：每个存档独立的 `model / system_prompt / params / dual_config`，互不干扰
-- **单 / 双模型**：单模型直聊；双模型（`model1` 🎭 + `model2` 🌟）按 `response_mode: both / model1 / model2` 与 `first_model` 依次回复，`pass_mode: user / assistant` 控制模型1的回复以何种身份透传给模型2
-- **自建供应商目录**：右上角「模型配置」添加 OpenAI 兼容端点（提供商 ID、显示名称、基础 URL、密钥或环境变量、model-id）；创建存档时先选供应商再选模型
-- **连通性测试**：每个已保存模型旁可发送 `hello` 探测是否能收到回复
-- **模型热更换**：存档内 `🔄 更换模型`，`PATCH /api/slots/{id}/config` 原子更新，双模型两侧完全独立
-- **流式对话**：`POST /api/chat` + `POST /slots/{id}/chat/continue` SSE 流，支持取消（`■`）与断点回滚，已落库回滚 `delete_messages_from`
-- **继续回复**：单模型合并续写最后一条 assistant；双模型相当于用户留空让两位角色各再回复一轮
-- **消息精细操作**：编辑（保存后自动重发）、删除（按 `id` 精确）、重新生成（单/双模型 `↻`，删除该轮及其后消息并重发）、清空对话
-- **标题 / 参数**：侧栏标题原地编辑；密钥挂在供应商上（可填密钥或从指定环境变量读取，均可空）；调用只发送 OpenAI 标准参数 `temperature / top_p / presence_penalty / frequency_penalty / max_tokens`
-- **导入导出**：导出 Markdown、导出可完整恢复的 JSON 备份（`GET /backup`）与导入（`POST /backup`）
-- **并发保护**：内存 `asyncio.Lock` + MySQL `GET_LOCK(ai_chat_slot_*)`，`slot_busy` 友好提示；5xx/网络指数退避重试，流开始后不重试
-- **开箱脚本**：`快速启动.bat`（端口检测、自动打开浏览器）、`重置启动.bat`（.venv、依赖、前端构建）
+### 🗂️ 存档系统
 
-## 🧱 技术栈
+- **10 个独立存档位**：每个存档独享 `model / system_prompt / params / dual_config`，互不干扰，可并行多段对话
+- **6 步创建向导**：模式 → 模型 → 参数 → 提示词 → 模型2 → 模型2参数；目录为空时不可创建
+- **存档内热更换模型**：`PATCH /api/slots/{i}/config` 原子更新模型/提示词/参数，不影响历史消息；双模型两侧完全独立
+- **自动标题**：首次对话后按系统提示词自动生成标题，侧栏可原地重命名
 
-- **后端**：Python 3.14 · FastAPI · Uvicorn · `openai` AsyncOpenAI · `httpx` · Pydantic · `pymysql` + `DBUtils.PooledDB` · `python-dotenv`
-- **前端**：Vite 6 · 原生 ESM · `marked` · `highlight.js`（按需）
-- **存储**：MySQL 8（`providers` + `catalog_models` + `slots` + `messages`）
-- **协议**：OpenAI 兼容 `chat.completions`（用户自填 `base_url`）
+### 💬 对话能力
+
+- **SSE 流式输出**：`POST /api/chat` 与 `POST /api/slots/{i}/chat/continue`，实时逐字渲染，支持取消（`■`）与断点回滚
+- **继续回复（⏩）**：单模型将续写内容合并回最后一条回复；双模型相当于用户留空，两位角色各再回复一轮
+- **消息精细操作**：编辑（保存后自动重发）、按 ID 精确删除、重新生成（`↻`，删除该轮及其后消息并重发）、清空对话
+- **上下文窗口**：每次传给模型最近 100 条消息，避免长对话超限
+- **Markdown 渲染**：`marked` + `highlight.js` 代码高亮，代码块一键复制
+
+### 🏷️ 模型目录
+
+- **自建供应商清单**：右上角「模型配置」添加任意 OpenAI 兼容端点（基础 URL、密钥或环境变量、model-id），存档只从目录中选择
+- **连通性测试**：每个已保存模型旁可发送 `hello` 探测，返回延迟与回复预览
+- **密钥管理**：密钥挂在供应商上，可明文存储或从环境变量读取；`GET /api/env-check` 检查各供应商密钥是否就绪
+- **引用保护**：被存档引用的供应商/模型不可删除，导入备份前须先在目录中建好对应模型
+
+### 🎨 个性化
+
+- **5 套配色主题**：宇宙紫蓝（默认）/ 翡翠绿 / 暖橙日落 / 樱花粉 / 深海青，一键切换
+- **明暗模式**：深色 / 浅色分段切换，首次访问跟随系统偏好，localStorage 持久化
+- **自定义背景图**：上传 / 选择 / 删除全局背景，支持透明度与模糊度调节（≤10MB，jpg/png/webp/gif）
+
+### 🔒 可靠性
+
+- **并发保护**：内存 `asyncio.Lock` + MySQL `GET_LOCK(ai_chat_slot_*)` 双层锁，冲突时返回 `slot_busy` 友好提示
+- **智能重试**：4xx 不重试；5xx / 超时 / 网络错误指数退避重试；流开始后中断不重试（防内容重复）
+- **失败回滚**：流中断或异常时自动回滚已落库消息（`delete_messages_from`），双模型中模型2失败时保留模型1已完成的回复
+- **完整备份**：导出可完整恢复的 JSON 备份（version 2）与 Markdown 对话导出，导入到任意空存档位
+
+## 🏗️ 系统架构
+
+```
+┌────────────────────── 浏览器（Vite 构建的静态前端）──────────────────────┐
+│  宫格存档视图 ⇄ 聊天视图 · 6步向导 · 模型配置 · 主题/背景弹层 · 帮助       │
+│  api.js: fetch + 指数退避          chat.js: SSE 流解析与事件分派          │
+└──────────────────────────────────┬──────────────────────────────────────┘
+                                   │ HTTP / SSE  (127.0.0.1:8000)
+┌──────────────────────────────────▼──────────────────────────────────────┐
+│ FastAPI（main.py lifespan 初始化全局单例）                               │
+│   routes/  slots · chat · models · catalog · backgrounds                │
+│   helpers/ resolve_slot · get_runtime（模型key → 运行时配置）· error     │
+│   clients/ AIClient — AsyncOpenAI 流式调用 + 重试                        │
+│   state/   AIClient / SlotManager 单例                                  │
+│   session_manager/ SlotManager — 事务模板 · 连接池 · GET_LOCK            │
+└──────────────────────────────────┬──────────────────────────────────────┘
+                                   │ pymysql + DBUtils 连接池
+                            ┌──────▼──────┐
+                            │   MySQL 8   │  slots · messages
+                            │  (自动建库)  │  providers · catalog_models
+                            └─────────────┘
+```
+
+## 🚀 快速开始
+
+### 环境要求
+
+| 依赖 | 版本 | 用途 |
+|---|---|---|
+| Python | 3.14+ | 后端运行 |
+| MySQL | 8.x | 数据存储（需已启动服务） |
+| Node.js | 18+ | 仅前端构建 / 开发时需要 |
+
+### 启动步骤（Windows）
+
+1. **配置数据库连接**：在项目根目录创建 `.env`（参考下文[配置项](#️-配置项)），`MYSQL_PASSWORD` 必填
+2. **首次运行 / 依赖变化后**：双击 `重置启动.bat` —— 安装后端依赖、构建前端、以 `--reload` 启动服务并打开浏览器
+3. **日常启动**：双击 `快速启动.bat` —— 检测 8000 端口占用，直接启动后端并自动打开浏览器
+
+> 数据库 `ai_chat` 与全部数据表（slots / messages / providers / catalog_models）在服务首次启动时**自动创建**，含旧表结构自动迁移，无需手动执行 SQL。
+
+### 手动启动
+
+```bash
+cd backend
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+# 访问 http://localhost:8000
+```
+
+## ⚙️ 配置项
+
+通过项目根 `.env` 或系统环境变量设置：
+
+| 变量 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `MYSQL_HOST` | 否 | `localhost` | MySQL 地址 |
+| `MYSQL_PORT` | 否 | `3306` | MySQL 端口 |
+| `MYSQL_USER` | 否 | `root` | MySQL 用户 |
+| `MYSQL_PASSWORD` | **是** | — | 未设置时服务拒绝启动 |
+| `MYSQL_DATABASE` | 否 | `ai_chat` | 库名（不存在自动创建） |
+| `ALLOWED_ORIGINS` | 否 | `http://localhost:5173,...` | CORS 白名单，逗号分隔 |
+| `UVICORN_HOST` | 否 | `127.0.0.1` | 监听地址（`python main.py` 时生效） |
+| `UVICORN_RELOAD` | 否 | `0` | 热重载开关（`python main.py` 时生效） |
+
+> 供应商密钥环境变量：在「模型配置」中为供应商勾选「从环境变量读取」后，把变量名配成你在此设置的名字（如 `MYPROVIDER_API_KEY=sk-xxxx`），新进程启动后生效。
+
+**生成参数说明**：创建存档时可预设 `temperature / top_p / presence_penalty / frequency_penalty / num_predict` 等参数；实际调用仅发送 OpenAI 标准参数（`num_predict` 折算为 `max_tokens`，上限 8192），其余参数（`min_p / top_k / repeat_penalty / num_ctx`）仅作记录，不会发送给不兼容的接口。
+
+## 🏷️ 供应商与模型
+
+应用不内置任何供应商，打开右上角「模型配置」自行添加：
+
+1. **提供商 ID**：小写字母/数字/连字符/下划线，创建后不可修改
+2. **显示名称 + 基础 URL**：任意 OpenAI 兼容端点，如 `https://api.example.com/v1`、本地 Ollama `http://127.0.0.1:11434/v1`
+3. **API 密钥**：可留空（本地无鉴权服务），或勾选「从环境变量读取」并填写变量名
+4. **添加模型**：`model-id`（发给接口的真实名称）+ 显示名称，可添加多条
+5. **测试**：保存后点模型旁「测试」，发送 `hello` 验证连通性
+
+存档引用的模型 key 形如 `{provider_slug}:{model_id}`；请求运行时由 `get_runtime` 解析为真实的 `base_url + model_id + api_key`。
+
+## 🎭 双模型 Role-Play
+
+双模型存档由 `dual_config` 驱动，两个模型各自拥有独立的模型、提示词、参数与角色名：
+
+| 配置 | 取值 | 行为 |
+|---|---|---|
+| `response_mode` | `both` / `model1` / `model2` | 同时回复 / 仅模型1 / 仅模型2，侧栏可随时切换 |
+| `first_model` | `model1` / `model2` | 本轮谁先回复 |
+| `pass_mode` | `user` / `assistant` | 模型1 的回复如何传给模型2 |
+
+**接力机制**（模型2 如何看到模型1 的回复）：
+
+- `pass_mode: user`（默认）：模型1 回复以 `[角色名 的回复]` 合并进用户消息，避免连续两条 user
+- `pass_mode: assistant`：模型1 回复以独立 `assistant` 消息（`角色名: 内容`）传入
+
+**流式事件顺序**：`model_start(role) → chunk* → model_done(role, message_id) → … → done(user_message_id, message_ids)`，前端据此渲染带角色标签（🎭 / 🌟）的气泡。
+
+## 🎨 主题与背景
+
+- 页面右上角主题按钮（宫格页与聊天页均有）打开主题弹层：顶部明暗分段切换，下方 5 套配色主题
+- 弹层底部「自定义背景」区：上传图片（≤10MB）或选择已有图片，实时调节透明度（0–100%）与模糊度（0–20px）
+- 背景图存放于 `backend/backgrounds/`，由 `/backgrounds` 静态挂载访问，也可手动放入文件
+- 所有偏好（主题 / 明暗 / 背景）保存在浏览器 localStorage，首次渲染前内联脚本预应用，无闪烁
 
 ## 📂 目录结构
 
 ```
 AI_project/
 ├─ backend/
-│  ├─ main.py            # FastAPI 入口，lifespan 初始化 AIClient/SlotManager，托管 frontend/dist
-│  ├─ config.py          # MySQL / 槽位 / 默认生成参数
-│  ├─ clients.py         # AIClient.stream_chat / test_hello
-│  ├─ session_manager.py # SlotManager + 供应商/模型目录 CRUD
-│  ├─ routes/ {slots,chat,models,catalog,backgrounds}.py
-│  ├─ models.py          # Pydantic 请求/响应（含 UpdateSlotRequest）
-│  └─ state.py           # 全局单例
+│  ├─ main.py             # FastAPI 入口：lifespan 初始化、注册路由、托管前端
+│  ├─ config.py           # MySQL / 槽位 / 上下文窗口 / 背景图 / 默认参数
+│  ├─ clients.py          # AIClient：流式调用、hello 测试、重试与错误映射
+│  ├─ helpers.py          # error / resolve_slot / get_runtime / 密钥解析
+│  ├─ models.py           # Pydantic 请求/响应模型
+│  ├─ session_manager.py  # SlotManager：建库建表、CRUD、目录、锁与事务
+│  ├─ state.py            # 全局单例
+│  ├─ routes/
+│  │  ├─ slots.py         # 存档 CRUD、消息操作、配置更新、备份导入导出
+│  │  ├─ chat.py          # /api/chat 与 continue 的 SSE 流（单/双模型）
+│  │  ├─ models.py        # 模型列表 / env-check / 默认参数
+│  │  ├─ catalog.py       # 供应商与目录模型 CRUD、hello 测试
+│  │  └─ backgrounds.py   # 背景图上传 / 列表 / 删除
+│  └─ backgrounds/        # 自定义背景图目录（运行时生成）
 ├─ frontend/
-│  ├─ index.html         # 10宫格存档视图 + 聊天视图 + 侧栏 + 6步向导 + 帮助弹窗
-│  ├─ js/ {main,api,state,ui,modals,chat,catalog,markdown,confirm,toast,utils}.js
-│  ├─ css/ (variables/base/sidebar/slots/chat/modals/...)
-│  └─ vite.config.js     # dev 5173 proxy /api → 8000，build dist
-├─ 快速启动.bat
-├─ 重置启动.bat
-└─ .env                  # 本地 env 模板（被 .gitignore 忽略）
+│  ├─ index.html          # 宫格视图 + 聊天视图 + 向导 + 各弹层
+│  ├─ js/
+│  │  ├─ main.js          # 入口：事件绑定与模块装配
+│  │  ├─ api.js           # apiFetch：指数退避（4xx 不重试）
+│  │  ├─ state.js         # 全局状态
+│  │  ├─ chat.js          # SSE 解析、发送/继续/取消/重发/编辑
+│  │  ├─ catalog.js       # 模型配置弹层（供应商/模型增删改测）
+│  │  ├─ modals.js        # 6 步创建向导 + 编辑复用
+│  │  ├─ theme.js         # 主题与明暗模式
+│  │  ├─ background.js    # 自定义背景管理
+│  │  └─ ui / markdown / confirm / toast / utils
+│  ├─ css/                # variables / themes / base / chat / modals / ...
+│  └─ vite.config.js      # dev 5173 代理 /api 与 /backgrounds → 8000
+├─ 快速启动.bat            # 日常启动：端口检测 + 起服务 + 开浏览器
+├─ 重置启动.bat            # 装依赖 + 构建前端 + --reload 启动
+└─ .env                   # 本地环境变量（已被 .gitignore 忽略）
 ```
-
-## 🚀 快速开始（Windows）
-
-> 要求：Python 3.14、`MySQL 8` 已启动、Node.js 18+（仅重置/开发需要）
-
-1. **配置环境变量**（系统环境变量或项目根 `.env`）：
-```ini
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=你的密码   # 必填
-MYSQL_DATABASE=ai_chat
-
-# 可选：在「模型配置」里勾选「从环境变量读取」后，把变量名配成你这里设置的名字
-# MYPROVIDER_API_KEY=sk-xxxx
-```
-2. **首次 / 依赖变化后**：双击 `重置启动.bat`（创建 `.venv`、装依赖、构建前端、启动 `127.0.0.1:8000`）
-3. **日常启动**：双击 `快速启动.bat`（检测 8000 占用、直接起后端、自动打开浏览器）
-
-生产默认 `UVICORN_RELOAD=0`，需热重载：`set UVICORN_RELOAD=1 && 快速启动.bat`。
-
-## ⚙️ 提供商与模型
-
-不再内置供应商清单。打开右上角「模型配置」自行添加：
-
-1. 提供商 ID（小写字母/数字/连字符/下划线，创建后不可改）
-2. 显示名称、基础 URL（OpenAI 兼容，如 `https://api.example.com/v1` 或本地 `http://127.0.0.1:11434/v1`）
-3. API 密钥（可空）或勾选从环境变量读取并填写变量名
-4. 一条或多条模型：`model-id`（发给接口的真实名称）+ 显示名称
-5. 保存后可点模型旁的「测试」发送 `hello`
-
-存档引用的模型 key 形如 `{slug}:{model_id}`。被存档引用的供应商/模型不能删除。导入备份前须先在目录中建好对应模型。
 
 ## 🔌 API 一览
 
+统一错误格式 `{code, message, detail}`，前端映射为中文 Toast / 内联卡片。
+
+### 存档与消息
+
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/api/models` | 目录中的模型列表 |
-| `GET` | `/api/env-check` | 各供应商运行时密钥是否可解析 |
-| `GET` | `/api/providers` | 供应商列表（密钥仅掩码） |
-| `POST` | `/api/providers` | 创建供应商（可带 models[]） |
-| `PATCH` | `/api/providers/{id}` | 更新供应商（不可改 slug） |
-| `DELETE` | `/api/providers/{id}` | 删除（无存档引用时） |
-| `POST` | `/api/providers/{id}/models` | 添加模型 |
-| `PATCH` | `/api/providers/{id}/models/{mid}` | 更新模型 |
-| `DELETE` | `/api/providers/{id}/models/{mid}` | 删除模型 |
-| `POST` | `/api/providers/{id}/models/{mid}/test` | 非流式 hello 测试 |
-| `GET` | `/api/default-params` | 默认生成参数 |
-| `GET` | `/api/slots` | 10 位列表（含 `message_count / dual_enabled`） |
+| `GET` | `/api/slots` | 10 个存档位概览（`message_count` / `dual_enabled` 等） |
 | `POST` | `/api/slots/{i}` | 创建存档（`CreateSlotRequest`，含双模型分支） |
-| `DELETE` | `/api/slots/{i}` | 删除存档（`CASCADE` 消息） |
-| `GET` | `/api/slots/{i}/chat` | 存档详情 + `history[{id,role,content,source}]` |
+| `DELETE` | `/api/slots/{i}` | 删除存档（消息 `CASCADE` 级联删除） |
+| `GET` | `/api/slots/{i}/chat` | 存档详情 + `history[{id, role, content, source}]` |
 | `POST` | `/api/slots/{i}/chat/clear` | 清空对话 |
-| `DELETE` | `/api/slots/{i}/chat/messages` | 删消息（优先 `from_id`，回退 `from_index/to_index` → `delete_messages_by_ids`） |
+| `DELETE` | `/api/slots/{i}/chat/messages` | 删消息（优先 `from_id`，回退 `from_index/to_index`） |
 | `PATCH` | `/api/slots/{i}/chat/messages` | 编辑消息（`message_id` 优先） |
-| `PATCH` | `/api/slots/{i}/title` | 改标题 |
-| `PATCH` | `/api/slots/{i}/api-key` | 已废弃（410，密钥改在模型配置） |
-| `PATCH` | `/api/slots/{i}/dual-toggle` | 切 `response_mode / first_model` |
-| `PATCH` | `/api/slots/{i}/config` | **模型更换**（`UpdateSlotRequest`，双模型两侧独立） |
-| `POST` | `/api/chat` | 流式对话 `SSE`（单/双分流，自动回滚） |
-| `POST` | `/api/slots/{i}/chat/continue` | 继续回复（单合并、双各新增一轮） |
-| `GET` | `/api/slots/{i}/chat/export` | 导出 Markdown 数据 |
-| `GET` | `/api/slots/{i}/backup` | 导出完整 JSON 备份 |
-| `POST` | `/api/slots/{i}/backup` | 导入备份到空位 |
+| `PATCH` | `/api/slots/{i}/title` | 修改标题 |
+| `PATCH` | `/api/slots/{i}/config` | **模型热更换**（原子更新，双模型两侧独立） |
+| `PATCH` | `/api/slots/{i}/dual-toggle` | 切换 `response_mode / first_model` |
+| `PATCH` | `/api/slots/{i}/api-key` | 已废弃（410，密钥改在模型配置中管理） |
 
-错误统一 `HTTPException {code, message, detail}`，前端映射为中文 Toast / 内联卡片。
+### 对话流
 
-## 🖥️ 前端要点
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/chat` | 流式对话 SSE（单/双分流，失败自动回滚） |
+| `POST` | `/api/slots/{i}/chat/continue` | 继续回复（单模型合并续写、双模型各回复一轮） |
 
-- **状态** `frontend/js/state.js:5`：`view / slots / currentSlotIndex / currentSlotData / streaming / dualEnabled / responseMode / firstModel`
-- **API** `frontend/js/api.js:12`：`apiFetch` 指数退避（4xx 不重试，5xx/网络重试）
-- **目录** `frontend/js/catalog.js`：右上角模型配置弹层，增删改供应商/模型，测试 hello
-- **向导** `frontend/js/modals.js:1`：6 步（0 模式 → 1 模型 → 2 参数 → 3 提示词/模型2 → 4 模型2参数 → 5 标题），目录为空时不可创建；编辑态 `openEditModal` 复用并隐藏 `step0`
-- **对话** `frontend/js/chat.js:1`：`sendMessage / continueLastReply / cancelStream / regenerate / editAndResend`，60s 空闲超时，`model_start / chunk / model_done / done / error` 事件分派，`model2` 通过 `pass_mode` 拼接
-- **UI** `frontend/js/ui.js:1`：宫格、消息气泡（含 `model-label-bar`）、侧栏信息、流式态、错误重试按钮
+### 模型目录
 
-## 🛠️ 开发
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/models` | 目录中的全部模型（含供应商信息） |
+| `GET` | `/api/env-check` | 各供应商运行时密钥是否可解析 |
+| `GET` | `/api/default-params` | 默认生成参数 |
+| `GET` / `POST` | `/api/providers` | 供应商列表（密钥仅掩码）/ 创建 |
+| `PATCH` / `DELETE` | `/api/providers/{id}` | 更新（不可改 slug）/ 删除（无存档引用时） |
+| `POST` | `/api/providers/{id}/models` | 添加模型 |
+| `PATCH` / `DELETE` | `/api/providers/{id}/models/{mid}` | 更新 / 删除模型 |
+| `POST` | `/api/providers/{id}/models/{mid}/test` | 非流式 `hello` 连通性测试 |
+
+### 备份与背景
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/slots/{i}/chat/export` | 导出 Markdown 对话数据 |
+| `GET` | `/api/slots/{i}/backup` | 导出完整 JSON 备份（version 2） |
+| `POST` | `/api/slots/{i}/backup` | 导入备份到空存档位 |
+| `GET` / `POST` | `/api/backgrounds` | 背景图列表 / 上传（≤10MB） |
+| `DELETE` | `/api/backgrounds/{name}` | 删除背景图 |
+
+## 📡 SSE 事件流
+
+`Content-Type: text/event-stream`，每帧 `data: {json}`：
+
+| 事件 | 载荷 | 说明 |
+|---|---|---|
+| `model_start` | `role, name, icon` | 某个模型开始生成（双模型逐个触发） |
+| `chunk` | `content, role?` | 增量文本片段 |
+| `model_done` | `role, name, icon, message_id` | 单个模型生成完毕并已落库 |
+| `continue_start` | `message_id` | 单模型继续回复开始（追加到该消息） |
+| `done` | `user_message_id, message_ids / assistant_message_id` | 整轮完成 |
+| `error` | `code, content, key_target?` | 出错（`slot_busy` / `auth_failed` / `rate_limited` / `stream_interrupted` 等），携带回滚定位 ID |
+
+## 🛠️ 开发指南
 
 ```bash
-# 前端开发（自动代理 /api → 8000）
+# 前端开发（dev server 代理 /api 与 /backgrounds → 8000）
 cd frontend
 npm install
-npm run dev      # http://localhost:5173
+npm run dev          # http://localhost:5173
 
 # 后端开发
 cd backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-# 或设置 UVICORN_RELOAD=1 后运行 快速启动.bat
 
-# 生产构建
+# 生产构建（backend 启动时优先托管 frontend/dist）
 cd frontend
-npm run build    # 输出 frontend/dist，backend 启动时优先托管
+npm run build
 ```
+
+数据表结构变更通过 `_init_tables` 的列检测自动迁移（如 `slots.params`、`messages.source`、`slots.model VARCHAR(192)`），升级代码后直接重启即可。
 
 ## ❓ 常见问题
 
-- **MySQL 连不上**：确认 `MYSQL_PASSWORD` 已设、`MySQL` 服务运行、`MYSQL_HOST/PORT` 正确；启动时自动 `CREATE DATABASE ai_chat CHARACTER SET utf8mb4`
-- **没有可选模型**：先在右上角「模型配置」添加供应商和模型
+- **启动报 MySQL 连接失败**：确认 `MYSQL_PASSWORD` 已设置、MySQL 服务已启动、主机端口正确；服务会自动 `CREATE DATABASE`，但需要用户具备建库权限
+- **创建存档时没有可选模型**：先在右上角「模型配置」添加供应商与模型
 - **本地 Ollama**：基础 URL 填 `http://127.0.0.1:11434/v1`，密钥可留空；需服务常驻且已 `ollama pull`
-- **API 401**：在模型配置中检查该供应商的密钥或环境变量；可用模型旁的「测试」按钮排查
-- **流式中断**：已开始后中断不重试（防重复），前端提示“回复生成中途中断，请重试”；可点 `⏩继续` 或重新发送
-- **端口占用**：`快速启动.bat` 检测 8000 `LISTENING`，若占用则直接打开现有服务
+- **对话报 401 / 认证失败**：到「模型配置」检查该供应商密钥或环境变量；可用模型旁「测试」快速排查
+- **流式中断**：已开始后中断不重试（防重复），提示"回复生成中途中断，请重试"；可点 `⏩继续` 或重新发送
+- **提示存档正在生成**：同一存档位有并发请求，等待上一轮完成即可；双层锁保证不会串写
+- **端口 8000 被占用**：`快速启动.bat` 检测到占用时直接打开现有服务，不会重复启动
 
-## 📄 许可
+## 🔒 安全须知与许可
 
-未声明许可证，仅供本地个人使用。勿将服务暴露到公网（无鉴权）。
+- 项目**无任何鉴权**，服务只监听 `127.0.0.1`，请勿将端口暴露到公网
+- API 密钥明文存储于 MySQL（或经环境变量注入），请自行做好机器安全
+- 未声明开源许可证，仅供本地个人使用
 
 ---
 
-> 构建自 `backend/config.py:1` · `backend/clients.py:1` · `backend/session_manager.py:1` · `frontend/index.html:1`
+<div align="center">
+
+> 相关文档：[后端运行说明](./backend/README.md)
+
+</div>
