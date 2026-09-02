@@ -27,7 +27,8 @@ ALLOWED_ORIGINS = (
 )
 
 # 限制
-CONTEXT_WINDOW_SIZE = 100   # 每次传给 AI 模型的消息数（上下文窗口）
+CONTEXT_WINDOW_SIZE = 100   # 每次传给模型的最多消息条数
+CONTEXT_MAX_CHARS = 80_000  # 历史正文总字符上限（超出则从最早的历史裁掉）
 SLOT_COUNT = 10
 
 # ── 自定义背景图 ──

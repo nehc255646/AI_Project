@@ -16,7 +16,6 @@ class ChatRequest(BaseModel):
 
 
 class GenerationParams(BaseModel):
-    thinking_enabled: bool = True
     temperature: float = Field(default=1.1, ge=0, le=2)
     min_p: float = Field(default=0.1, ge=0, le=1)
     top_k: int = Field(default=100, ge=0, le=1000)
@@ -30,7 +29,7 @@ class GenerationParams(BaseModel):
 
 class DualModelConfig(BaseModel):
     """双模型配置 — 第二模型的所有信息。"""
-    model: str = "deepseek:deepseek-v4-flash"
+    model: str = Field(min_length=1, max_length=192)
     system_prompt: str = Field(default="使用中文回答", max_length=100_000)
     api_key: str = Field(default="", max_length=256)
     params: Optional[GenerationParams] = None
@@ -47,7 +46,7 @@ class DualConfig(BaseModel):
 
 
 class CreateSlotRequest(BaseModel):
-    model: str = "deepseek:deepseek-v4-flash"
+    model: str = Field(min_length=1, max_length=192)
     system_prompt: str = Field(default="使用中文回答", max_length=100_000)
     api_key: str = Field(default="", max_length=256)
     title: str = Field(default="", max_length=128)
@@ -68,7 +67,7 @@ class DualToggleRequest(BaseModel):
 
 class UpdateDualModelConfig(BaseModel):
     """双模型中模型2的部分更新 — 全部可选，用于区分“未传”与“清空”。"""
-    model: Optional[str] = Field(default=None, max_length=128)
+    model: Optional[str] = Field(default=None, max_length=192)
     system_prompt: Optional[str] = Field(default=None, max_length=100_000)
     api_key: Optional[str] = Field(default=None, max_length=256)
     params: Optional[GenerationParams] = None
@@ -81,7 +80,7 @@ class UpdateSlotRequest(BaseModel):
     `model2` 嵌套对象对应模型2，两者完全独立互不覆盖；
     单模型时忽略 `model2/model2_name/pass_mode`。
     """
-    model: Optional[str] = Field(default=None, max_length=128)
+    model: Optional[str] = Field(default=None, max_length=192)
     system_prompt: Optional[str] = Field(default=None, max_length=100_000)
     api_key: Optional[str] = Field(default=None, max_length=256)
     title: Optional[str] = Field(default=None, max_length=128)

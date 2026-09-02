@@ -168,24 +168,6 @@
   pointer-events: none;
 }
 
-#create-api-key {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--bg-surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--text-primary);
-  transition: border-color var(--transition-fast);
-}
-#create-api-key:focus {
-  outline: none;
-  border-color: var(--accent-1);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
-}
-#create-api-key::placeholder { color: var(--text-muted); }
-
 .create-hint {
   font-size: 11px;
   color: var(--text-muted);

@@ -68,7 +68,6 @@ def create_slot(slot_index: int, req: CreateSlotRequest):
             "model2": {
                 "model": m2.model,
                 "system_prompt": m2.system_prompt,
-                "api_key": m2.api_key,
                 "params": m2.params.model_dump() if m2.params else {},
             },
         }
@@ -253,7 +252,7 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
     # 校验是否有任何更新
     has_update = any(
         v is not None for v in [
-            req.model, req.system_prompt, req.api_key, req.title,
+            req.model, req.system_prompt, req.title,
             req.params, req.model1_name, req.model2_name, req.model2, req.pass_mode,
         ]
     )
@@ -272,7 +271,6 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
     # 预备更新值（None 表示不更新）
     new_model = None
     new_prompt = None
-    new_api_key = None
     new_title = None
     new_params = None
     new_dual = None
@@ -289,10 +287,6 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
     if req.model is not None:
         validate_model_key(req.model)
         new_model = req.model
-
-    # 存档级密钥已废弃，忽略客户端传入的 api_key
-    if req.api_key is not None:
-        new_api_key = None
 
     # system_prompt
     if req.system_prompt is not None:
@@ -350,7 +344,6 @@ def update_slot_config(slot_index: int, req: UpdateSlotRequest):
         slot_index,
         model=new_model,
         system_prompt=new_prompt,
-        api_key=new_api_key,
         title=new_title,
         params=new_params,
         dual_config=new_dual,

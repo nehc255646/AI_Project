@@ -210,11 +210,6 @@
             <span class="select-arrow">▼</span>
           </div>
         </div>
-        <div class="create-field" id="api-key-field" style="display:none">
-          <label class="create-label" id="api-key-label">API 密钥</label>
-          <input type="password" id="create-api-key" class="create-input" placeholder="请输入 API Key" autocomplete="off" />
-          <p class="create-hint">密钥仅与此存档绑定</p>
-        </div>
       </div>
 
       <!-- Step 2: Params + System Prompt -->
@@ -225,13 +220,6 @@
         </div>
         <p class="wizard-params-hint">调整 AI 生成参数，鼠标悬停可查看详细说明</p>
         <div class="params-grid" id="params-grid">
-          <div class="create-field thinking-option" id="thinking-option" style="display:none;grid-column:1/-1">
-            <label class="create-label">DeepSeek 思考模式</label>
-            <label class="pass-mode-option">
-              <input type="checkbox" id="param-thinking-enabled" checked />
-              <span>开启思考（不输出思考内容）</span>
-            </label>
-          </div>
           <div class="param-item">
             <label class="param-label" title="控制输出的随机性，值越高越有创意和变化">temperature</label>
             <div class="param-control">
@@ -329,7 +317,7 @@
           <div class="create-field">
             <label class="create-label">系统提示词</label>
             <textarea id="create-system-prompt-single" class="wizard-prompt-input" placeholder="设定 AI 的角色、说话风格等…">使用中文回答</textarea>
-            <p class="create-hint">存档标题留空时将从系统提示词自动生成</p>
+            <p class="create-hint">存档标题留空时将从首条用户消息自动生成</p>
           </div>
         </div>
         <div id="step3-dual" style="display:none">
@@ -355,11 +343,6 @@
               <span class="select-arrow">▼</span>
             </div>
           </div>
-          <div class="create-field" id="api-key-field-2" style="display:none">
-            <label class="create-label" id="api-key-label-2">API 密钥</label>
-            <input type="password" id="create-api-key-2" class="create-input" placeholder="请输入 API Key" autocomplete="off" />
-            <p class="create-hint">密钥仅与此存档绑定</p>
-          </div>
         </div>
       </div>
 
@@ -371,13 +354,6 @@
         </div>
         <p class="wizard-params-hint">调整模型 2 的生成参数</p>
         <div class="params-grid" id="params-grid-m2">
-          <div class="create-field thinking-option" id="thinking-option-2" style="display:none;grid-column:1/-1">
-            <label class="create-label">DeepSeek 思考模式</label>
-            <label class="pass-mode-option">
-              <input type="checkbox" id="param2-thinking-enabled" checked />
-              <span>开启思考（不输出思考内容）</span>
-            </label>
-          </div>
           <div class="param-item">
             <label class="param-label" title="控制输出的随机性">temperature</label>
             <div class="param-control">

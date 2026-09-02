@@ -8,12 +8,13 @@ from __future__ import annotations
 import json
 import logging
 import asyncio
+import re
 from typing import AsyncGenerator
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from config import CONTEXT_WINDOW_SIZE
+from config import CONTEXT_WINDOW_SIZE, CONTEXT_MAX_CHARS
 from helpers import resolve_slot, error, get_runtime
 from models import ChatRequest
 from state import get_ai_client, get_slot_mgr
@@ -63,9 +64,27 @@ CONTINUE_PROMPT = "请继续你刚才的回复，接着上一条的内容往下�
 DUAL_CONTINUE_PROMPT = "（用户没有发送新消息，请两位角色自然地继续刚才的对话，推进当前话题。）"
 
 
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+_THINK_BLOCK = re.compile(
+    r"<think(?:ing)?>.*?</think(?:ing)?>|◁think▷.*?◁/think▷",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 def _sse(data: dict) -> str:
     """构造 SSE 数据帧；ensure_ascii=False 避免中文被转义，减小传输体积。"""
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _strip_think(text: str) -> str:
+    if not text:
+        return ""
+    return _THINK_BLOCK.sub("", text).strip()
 
 
 def _exception_error_event(e: Exception, ref_key: str, ref_value) -> dict:
@@ -101,18 +120,35 @@ def _exception_error_event(e: Exception, ref_key: str, ref_value) -> dict:
 
 
 def _clean(items: list) -> list:
-    """只保留 role/content 字段，避免把数据库字段泄漏给模型。"""
+    """只保留 role/content，并去掉历史里残留的思考块。"""
     return [
-        {"role": m.get("role"), "content": m.get("content")}
+        {"role": m.get("role"), "content": _strip_think(m.get("content") or "")}
         for m in items
     ]
 
 
-def _auto_title(slot_index: int, system_prompt: str) -> str:
-    """从系统提示词自动生成存档标题，空提示词时退化为 存档N。"""
-    prompt_line = (system_prompt or "").strip().replace("\n", " ").strip()
-    if prompt_line:
-        return prompt_line[:20]
+def _truncate_history(history: list) -> list:
+    """先按条数、再按总字符从尾部截断历史。"""
+    items = history[-CONTEXT_WINDOW_SIZE:] if len(history) > CONTEXT_WINDOW_SIZE else list(history)
+    if not items:
+        return []
+    total = 0
+    kept: list = []
+    for m in reversed(items):
+        n = len(m.get("content") or "")
+        if kept and total + n > CONTEXT_MAX_CHARS:
+            break
+        kept.append(m)
+        total += n
+    kept.reverse()
+    return kept
+
+
+def _auto_title(slot_index: int, text: str) -> str:
+    """用用户首条消息生成存档标题，空内容时退化为 存档N。"""
+    line = (text or "").strip().replace("\n", " ").strip()
+    if line:
+        return line[:20]
     return f"存档{slot_index + 1}"
 
 
@@ -131,9 +167,8 @@ async def _stream_dual_turn(
     回滚起点 = 本轮第一条已保存的 assistant 消息。
     """
     dual_config = data.get("dual_config", {}) or {}
-    model = data.get("model", "deepseek:deepseek-v4-flash")
+    model = data.get("model") or ""
     system_prompt = data.get("system_prompt", "使用中文回答")
-    api_key = data.get("api_key", "")
     params = data.get("params", {}) or {}
     response_mode = dual_config.get("response_mode", "both")
     first_model = dual_config.get("first_model", "model1")
@@ -185,15 +220,13 @@ async def _stream_dual_turn(
             if role == "model1":
                 cfg_key = model
                 cfg_system = system_prompt
-                cfg_key_raw = api_key
                 cfg_params = params
                 role_name = model1_name
                 role_icon = MODEL1_ICON
             else:
                 m2 = dual_config.get("model2") or {}
-                cfg_key = m2.get("model", model)
+                cfg_key = m2.get("model") or model
                 cfg_system = m2.get("system_prompt", system_prompt)
-                cfg_key_raw = m2.get("api_key", api_key)
                 cfg_params = m2.get("params", params)
                 role_name = model2_name
                 role_icon = MODEL2_ICON
@@ -204,14 +237,14 @@ async def _stream_dual_turn(
             # ── 构建消息上下文 ──
             if is_current_first:
                 # 第一个模型：正常历史（含本轮用户消息）
-                ctx = history[-CONTEXT_WINDOW_SIZE:] if len(history) > CONTEXT_WINDOW_SIZE else history
+                ctx = _truncate_history(history)
                 messages = [{"role": "system", "content": cfg_system}, *_clean(ctx)]
             else:
                 # 第二个模型：
                 #   history 目前 = [...历史..., {user: 本轮}, {assistant: 第一模型回复}]
                 #   排除最后两条，取之前的历史
-                ctx = history[-(CONTEXT_WINDOW_SIZE + 2):] if len(history) > CONTEXT_WINDOW_SIZE + 2 else history
-                prev = ctx[:-2] if len(ctx) >= 2 else []
+                prev_src = history[:-2] if len(history) >= 2 else []
+                prev = _truncate_history(prev_src)
                 messages = [{"role": "system", "content": cfg_system}, *_clean(prev)]
                 # 用户原始消息（独立一条）
                 messages.append({"role": "user", "content": user_content})
@@ -282,11 +315,11 @@ async def _stream_dual_turn(
                 'message_id': saved[0] if saved else None,
             })
 
-        # 自动标题
-        if not data.get("title", ""):
+        # 自动标题：普通发消息时用用户原文，继续回复不改标题
+        if persist_user and not data.get("title", ""):
             if not await _db_call(
                 get_slot_mgr().update_slot_meta,
-                slot_index, {"title": _auto_title(slot_index, system_prompt)}
+                slot_index, {"title": _auto_title(slot_index, user_content)}
             ):
                 logger.warning(f"自动更新存档 #{slot_index + 1} 标题失败")
 
@@ -331,15 +364,17 @@ async def _stream_dual_turn(
 @router.post("/api/chat")
 async def chat(req: ChatRequest):
     """流式对话 — 接收 JSON，返回 SSE 流式响应。"""
+    user_content = (req.message or "").strip()
+    if not user_content:
+        error("empty_message", "消息不能为空", 400)
+
     data = await _db_call(resolve_slot, req.slot_index)
 
     history: list = data.get("history", [])
     system_prompt: str = data.get("system_prompt", "使用中文回答")
-    model: str = data.get("model", "deepseek:deepseek-v4-flash")
-    api_key: str = data.get("api_key", "")
+    model: str = data.get("model") or ""
     params: dict = data.get("params", {}) or {}
     dual_config: dict = data.get("dual_config", {}) or {}
-    user_content = req.message or "(空消息)"
 
     # ── 是否双模型 ──
     dual_enabled = dual_config.get("enabled", False)
@@ -380,11 +415,7 @@ async def chat(req: ChatRequest):
                 rt = get_runtime(actual_model, http=False)
                 max_tokens = rt.get("max_tokens")
 
-                context_history = (
-                    history[-CONTEXT_WINDOW_SIZE:]
-                    if len(history) > CONTEXT_WINDOW_SIZE
-                    else history
-                )
+                context_history = _truncate_history(history)
                 messages = [{"role": "system", "content": actual_prompt}, *_clean(context_history)]
 
                 chunks = []
@@ -420,7 +451,7 @@ async def chat(req: ChatRequest):
                 if not data.get("title", ""):
                     if not await _db_call(
                         get_slot_mgr().update_slot_meta,
-                        req.slot_index, {"title": _auto_title(req.slot_index, actual_prompt)}
+                        req.slot_index, {"title": _auto_title(req.slot_index, user_content)}
                     ):
                         logger.warning(f"自动更新存档 #{req.slot_index + 1} 标题失败")
 
@@ -477,11 +508,7 @@ async def chat(req: ChatRequest):
     return StreamingResponse(
         _locked_stream(req.slot_index, stream()),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_SSE_HEADERS,
     )
 
 
@@ -519,11 +546,7 @@ async def continue_chat(slot_index: int):
         return StreamingResponse(
             _locked_stream(slot_index, stream()),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            headers=_SSE_HEADERS,
         )
 
     # ── 单模型：延续最后一条回复（合并式） ──
@@ -546,11 +569,7 @@ async def continue_chat(slot_index: int):
     max_tokens = rt.get("max_tokens")
 
     # 上下文：历史（截断到窗口，含最后一条 assistant）+ 继续指令（仅本次请求，不入库）
-    context_history = (
-        history[-CONTEXT_WINDOW_SIZE:]
-        if len(history) > CONTEXT_WINDOW_SIZE
-        else history
-    )
+    context_history = _truncate_history(history)
     messages = [{"role": "system", "content": cfg_system}, *_clean(context_history)]
     messages.append({"role": "user", "content": CONTINUE_PROMPT})
 
@@ -606,9 +625,5 @@ async def continue_chat(slot_index: int):
     return StreamingResponse(
         _locked_stream(slot_index, stream()),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_SSE_HEADERS,
     )

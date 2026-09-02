@@ -1,7 +1,7 @@
 [project]
-name = "backend"
+name = "nehchat-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Nehchat Agent — 本地 AI 对话与双模型 Role-Play"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

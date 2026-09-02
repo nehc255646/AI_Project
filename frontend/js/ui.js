@@ -17,8 +17,13 @@ function el(id) {
   return document.getElementById(id);
 }
 
+/** 将存档中的模型 key 解析为目录里的显示名称；找不到时回退为 model-id。 */
 function displayModel(key) {
   if (!key) return "";
+  const found = (state.models || []).find((m) => m.key === key);
+  if (found) {
+    return found.display_name || found.id || "";
+  }
   const idx = key.indexOf(":");
   return idx > 0 ? key.slice(idx + 1) : key;
 }

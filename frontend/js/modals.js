@@ -1,5 +1,5 @@
 /**
- * 弹窗管理 — 创建存档向导（单/双模型）、导出弹窗与 API Key 字段联动。
+ * 弹窗管理 — 创建存档向导（单/双模型）与导出弹窗。
  */
 
 import { state } from "./state.js";
@@ -39,7 +39,6 @@ async function loadDefaultParams() {
 function getParamValues(suffix = "") {
   const el = (id) => document.getElementById(`param${suffix}-${id}`);
   return {
-    thinking_enabled: el("thinking-enabled")?.checked ?? true,
     temperature: parseFloat(el("temperature").value),
     top_p: parseFloat(el("top-p").value),
     min_p: parseFloat(el("min-p").value),
@@ -50,13 +49,6 @@ function getParamValues(suffix = "") {
     num_ctx: parseInt(el("num-ctx").value, 10),
     num_predict: parseInt(el("num-predict").value, 10),
   };
-}
-
-function updateThinkingOption(_modelSelectId, optionId, checkboxId) {
-  const option = document.getElementById(optionId);
-  const checkbox = document.getElementById(checkboxId);
-  if (option) option.style.display = "none";
-  if (checkbox) checkbox.checked = false;
 }
 
 function showStep(step) {
@@ -250,15 +242,11 @@ export async function openCreateModal(index) {
   // 重置值
   document.getElementById("create-model1-name").value = "";
   document.getElementById("create-model2-name").value = "";
-  document.getElementById("create-api-key").value = "";
-  document.getElementById("create-api-key-2").value = "";
   document.getElementById("create-title").value = "";
   document.getElementById("create-title-dual").value = "";
   document.getElementById("create-system-prompt").value = "使用中文回答";
   document.getElementById("create-system-prompt-single").value = "使用中文回答";
   document.getElementById("create-system-prompt-2").value = "使用中文回答";
-  document.getElementById("param-thinking-enabled").checked = true;
-  document.getElementById("param2-thinking-enabled").checked = true;
 
   const params = await loadDefaultParams();
   // 模型1参数
@@ -289,10 +277,6 @@ export async function openCreateModal(index) {
 
   updateParamDisplays();
   updateParamDisplays("2");
-  updateApiKeyField();
-  updateApiKeyField2();
-  updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
-  updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
 
   showStep(0);
   document.getElementById("create-modal").classList.remove("hidden");
@@ -306,9 +290,6 @@ export function closeCreateModal() {
   editSlotIndex = null;
   const createBtn = document.getElementById("wizard-create");
   if (createBtn) createBtn.textContent = "创建存档";
-  // 恢复 API Key 字段为创建模式的必填校验
-  updateApiKeyField();
-  updateApiKeyField2();
 }
 
 /** 模型更换 — 打开编辑弹窗（复用创建向导，但数据回填且仅更新提供的字段） */
@@ -354,7 +335,7 @@ export async function openEditModal() {
   }
 
   // ——— 填充模型1 ———
-  const curModel = data.model || "deepseek:deepseek-v4-flash";
+  const curModel = data.model || "";
   const curDual = data.dual_config || {};
   const curParams = data.params || await loadDefaultParams();
   const curPrompt = data.system_prompt || "使用中文回答";
@@ -390,8 +371,6 @@ export async function openEditModal() {
   }
 
   document.getElementById("create-model1-name").value = curDual.model1_name || "";
-  // API Key 保持空（留空即不更新），placeholder 已由 updateApiKeyField 处理
-  document.getElementById("create-api-key").value = "";
   document.getElementById("create-system-prompt").value = curPrompt;
   document.getElementById("create-system-prompt-single").value = curPrompt;
   document.getElementById("create-title").value = curTitle;
@@ -412,9 +391,6 @@ export async function openEditModal() {
   setVal("param-frequency-penalty", p.frequency_penalty ?? 0.0);
   setVal("param-num-ctx", p.num_ctx ?? 131072);
   setVal("param-num-predict", p.num_predict ?? 4096);
-  // thinking
-  const thinkingEl = document.getElementById("param-thinking-enabled");
-  if (thinkingEl) thinkingEl.checked = p.thinking_enabled !== undefined ? !!p.thinking_enabled : true;
 
   // ——— 填充模型2（仅双模型） ———
   if (isDualMode) {
@@ -447,7 +423,6 @@ export async function openEditModal() {
     }
 
     document.getElementById("create-model2-name").value = curDual.model2_name || "";
-    document.getElementById("create-api-key-2").value = "";
     document.getElementById("create-system-prompt-2").value = m2Prompt;
     setVal("param2-temperature", m2Params.temperature ?? 1.1);
     setVal("param2-top-p", m2Params.top_p ?? 0.95);
@@ -458,8 +433,6 @@ export async function openEditModal() {
     setVal("param2-frequency-penalty", m2Params.frequency_penalty ?? 0.0);
     setVal("param2-num-ctx", m2Params.num_ctx ?? 131072);
     setVal("param2-num-predict", m2Params.num_predict ?? 4096);
-    const thinkingEl2 = document.getElementById("param2-thinking-enabled");
-    if (thinkingEl2) thinkingEl2.checked = m2Params.thinking_enabled !== undefined ? !!m2Params.thinking_enabled : true;
 
     // pass_mode
     const passMode = curDual.pass_mode || "user";
@@ -468,29 +441,14 @@ export async function openEditModal() {
   } else {
     // 单模型重置模型2字段，避免误提交
     document.getElementById("create-model2-name").value = "";
-    document.getElementById("create-api-key-2").value = "";
     document.getElementById("create-system-prompt-2").value = "使用中文回答";
   }
 
   updateParamDisplays();
   updateParamDisplays("2");
-  updateApiKeyField();
-  updateApiKeyField2();
-  updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
-  updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
 
   showStep(1);
   document.getElementById("create-modal").classList.remove("hidden");
-}
-
-export function updateApiKeyField() {
-  const field = document.getElementById("api-key-field");
-  if (field) field.style.display = "none";
-}
-
-export function updateApiKeyField2() {
-  const field = document.getElementById("api-key-field-2");
-  if (field) field.style.display = "none";
 }
 
 // ── 导出弹窗 ──
@@ -651,7 +609,8 @@ export function initModalListeners() {
         document.getElementById("step3-dual").style.display = "block";
         document.getElementById("step3-icon").textContent = MODEL2_ICON;
         document.getElementById("step3-title").textContent = "模型 2 配置";
-        populateProviderSelect("create-provider2-select", "create-model2-select", "deepseek:deepseek-v4-flash");
+        const fallbackKey = (state.models[0] && state.models[0].key) || "";
+        populateProviderSelect("create-provider2-select", "create-model2-select", fallbackKey);
       } else {
         document.getElementById("field-model1-name").style.display = "none";
         document.getElementById("step1-icon").textContent = "🤖";
@@ -877,24 +836,11 @@ export function initModalListeners() {
     if (e.target === createModal) closeCreateModal();
   });
 
-  // 提供商/模型切换 API Key 联动
   document.getElementById("create-provider-select").addEventListener("change", () => {
     populateModelSelect("create-model-select");
-    updateApiKeyField();
-    updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
-  });
-  document.getElementById("create-model-select").addEventListener("change", () => {
-    updateApiKeyField();
-    updateThinkingOption("create-model-select", "thinking-option", "param-thinking-enabled");
   });
   document.getElementById("create-provider2-select").addEventListener("change", () => {
     populateModelSelect("create-model2-select");
-    updateApiKeyField2();
-    updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
-  });
-  document.getElementById("create-model2-select").addEventListener("change", () => {
-    updateApiKeyField2();
-    updateThinkingOption("create-model2-select", "thinking-option-2", "param2-thinking-enabled");
   });
 
   // 参数滑块联动

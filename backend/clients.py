@@ -3,9 +3,11 @@ AI 客户端层 — 统一通过 OpenAI 兼容接口调用。
 
 支持流式对话、连通性测试、API 临时故障的自动重试（指数退避）。
 供应商 / 模型由数据库目录解析后再传入。
+默认关闭思考链：RP 场景下思考只会拖慢出字并污染角色回复。
 """
 import asyncio
 import logging
+import re
 import time
 from typing import AsyncGenerator, Dict, List, Tuple
 
@@ -17,6 +19,76 @@ logger = logging.getLogger(__name__)
 _API_RETRY_MAX = 2
 _API_RETRY_DELAY = 1.0
 
+# 常见 OpenAI 兼容口关闭思考的 extra_body；不被接受时自动去掉再试
+_THINKING_OFF_EXTRA = {
+    "enable_thinking": False,
+    "chat_template_kwargs": {"enable_thinking": False},
+}
+
+_THINK_START = re.compile(
+    r"<think(?:ing)?>|◁think▷|<redacted_thinking>",
+    re.IGNORECASE,
+)
+_THINK_END = re.compile(
+    r"</think(?:ing)?>|◁/think▷|</redacted_thinking>",
+    re.IGNORECASE,
+)
+_THINK_HOLD = re.compile(
+    r"<(?:t(?:h(?:i(?:n(?:k(?:i(?:n(?:g)?)?)?)?)?)?)?)?|◁(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$",
+    re.IGNORECASE,
+)
+
+
+class _ThinkStripper:
+    """从流式文本中丢掉思考块，避免泄漏进角色回复。"""
+
+    def __init__(self):
+        self._buf = ""
+        self._hiding = False
+
+    def feed(self, text: str) -> str:
+        if not text:
+            return ""
+        self._buf += text
+        out: list[str] = []
+        while self._buf:
+            if self._hiding:
+                m = _THINK_END.search(self._buf)
+                if not m:
+                    if len(self._buf) > 32:
+                        self._buf = self._buf[-32:]
+                    break
+                self._buf = self._buf[m.end():]
+                self._hiding = False
+                if self._buf.startswith("\n"):
+                    self._buf = self._buf[1:]
+                continue
+            m = _THINK_START.search(self._buf)
+            if not m:
+                hold = 0
+                hm = _THINK_HOLD.search(self._buf)
+                if hm and hm.end() == len(self._buf):
+                    hold = len(hm.group(0))
+                if hold:
+                    out.append(self._buf[:-hold])
+                    self._buf = self._buf[-hold:]
+                else:
+                    out.append(self._buf)
+                    self._buf = ""
+                break
+            out.append(self._buf[:m.start()])
+            self._buf = self._buf[m.end():]
+            self._hiding = True
+        return "".join(out)
+
+    def flush(self) -> str:
+        if self._hiding:
+            self._buf = ""
+            return ""
+        s = self._buf
+        self._buf = ""
+        return s
+
 
 class AIClientError(Exception):
     def __init__(self, message: str, error_code: str):
@@ -26,7 +98,8 @@ class AIClientError(Exception):
 
 class AIClient:
     def __init__(self):
-        self._clients: Dict[Tuple[str, str], AsyncOpenAI] = {}
+        self._clients: Dict[Tuple[str, str, float], AsyncOpenAI] = {}
+        self._thinking_extra_rejected: set[str] = set()
 
     async def close(self) -> None:
         for client in self._clients.values():
@@ -35,6 +108,7 @@ class AIClient:
             except Exception:
                 pass
         self._clients.clear()
+        self._thinking_extra_rejected.clear()
 
     def _get_client(self, base_url: str, api_key: str, timeout: float = 60) -> AsyncOpenAI:
         cache_key = (base_url, api_key, timeout)
@@ -65,6 +139,44 @@ class AIClient:
             kwargs["max_tokens"] = max_tokens
         return kwargs
 
+    def _with_thinking_off(self, kwargs: dict, base_url: str) -> dict:
+        if base_url in self._thinking_extra_rejected:
+            return kwargs
+        out = dict(kwargs)
+        extra = dict(out.get("extra_body") or {})
+        extra.update(_THINKING_OFF_EXTRA)
+        out["extra_body"] = extra
+        return out
+
+    def _reject_thinking_extra(self, base_url: str) -> None:
+        if base_url not in self._thinking_extra_rejected:
+            self._thinking_extra_rejected.add(base_url)
+            logger.info(f"供应商不接受关闭思考参数，后续不再附带: {base_url}")
+
+    @staticmethod
+    def _looks_like_unknown_param(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        keys = (
+            "enable_thinking",
+            "chat_template_kwargs",
+            "unknown parameter",
+            "unrecognized",
+            "unexpected keyword",
+            "extra inputs",
+            "not a valid parameter",
+            "invalid parameter",
+            "未知参数",
+            "不支持的参数",
+        )
+        return any(k in msg for k in keys)
+
+    @staticmethod
+    def _delta_text(chunk) -> str:
+        if not chunk.choices:
+            return ""
+        delta = chunk.choices[0].delta
+        return (getattr(delta, "content", None) or "") if delta is not None else ""
+
     async def stream_chat(
         self,
         messages: List[Dict],
@@ -76,17 +188,27 @@ class AIClient:
     ) -> AsyncGenerator[str, None]:
         """异步生成器，逐块产出回复文本（适配 SSE）。"""
         client = self._get_client(base_url, api_key)
-        kwargs = self._build_kwargs(messages, model_id, max_tokens, params, stream=True)
+        base_kwargs = self._build_kwargs(messages, model_id, max_tokens, params, stream=True)
 
         last_exception = None
         started = False
+        stripper = _ThinkStripper()
+        use_extra = base_url not in self._thinking_extra_rejected
         for attempt in range(_API_RETRY_MAX + 1):
             try:
+                kwargs = self._with_thinking_off(base_kwargs, base_url) if use_extra else base_kwargs
                 stream = await client.chat.completions.create(**kwargs)
                 async for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        started = True
-                        yield chunk.choices[0].delta.content
+                    text = self._delta_text(chunk)
+                    if not text:
+                        continue
+                    started = True
+                    visible = stripper.feed(text)
+                    if visible:
+                        yield visible
+                tail = stripper.flush()
+                if tail:
+                    yield tail
                 return
             except (RateLimitError, APITimeoutError, APIError,
                     httpx.TimeoutException, httpx.NetworkError) as e:
@@ -94,6 +216,17 @@ class AIClient:
                     logger.warning(f"流式响应已开始后中断（不重试，避免内容重复）: {e}")
                     raise AIClientError("回复生成中途中断，请重试", "stream_interrupted") from e
                 last_exception = e
+
+                if (
+                    use_extra
+                    and isinstance(e, APIError)
+                    and getattr(e, "status_code", None) == 400
+                    and self._looks_like_unknown_param(e)
+                ):
+                    self._reject_thinking_extra(base_url)
+                    use_extra = False
+                    stripper = _ThinkStripper()
+                    continue
 
                 if isinstance(e, RateLimitError) or getattr(e, "status_code", None) == 429:
                     logger.warning(f"API 速率限制 (尝试 {attempt + 1}): {e}")
@@ -115,13 +248,15 @@ class AIClient:
                         raise AIClientError("API 认证失败，请到「模型配置」检查该供应商的密钥", "auth_failed") from e
                     if status == 403:
                         raise AIClientError("API 权限不足，请检查账户权限", "permission_denied") from e
+                    if status == 404:
+                        raise AIClientError("接口或模型不存在，请检查基础 URL 与 model-id", "not_found") from e
                     if status >= 500:
                         logger.error(f"API 服务错误 (尝试 {attempt + 1}): {e}")
                         if attempt < _API_RETRY_MAX:
                             await asyncio.sleep(_API_RETRY_DELAY * (2 ** attempt))
                             continue
                         raise AIClientError(f"API 服务暂时不可用 ({status})", "service_unavailable") from e
-                    raise
+                    raise AIClientError(f"API 请求被拒绝 ({status})", "request_failed") from e
 
                 logger.warning(f"网络错误 (尝试 {attempt + 1}): {e}")
                 if attempt < _API_RETRY_MAX:
@@ -138,16 +273,30 @@ class AIClient:
         """向模型发一条 hello，仅供用户参考连通性。"""
         client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=20)
         started = time.perf_counter()
+        payload = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 32,
+            "stream": False,
+        }
+        use_extra = base_url not in self._thinking_extra_rejected
         try:
-            resp = await client.chat.completions.create(
-                model=model_id,
-                messages=[{"role": "user", "content": "hello"}],
-                max_tokens=32,
-                stream=False,
-            )
+            try:
+                kwargs = dict(payload)
+                if use_extra:
+                    kwargs["extra_body"] = dict(_THINKING_OFF_EXTRA)
+                resp = await client.chat.completions.create(**kwargs)
+            except APIError as e:
+                if use_extra and e.status_code == 400 and self._looks_like_unknown_param(e):
+                    self._reject_thinking_extra(base_url)
+                    resp = await client.chat.completions.create(**payload)
+                else:
+                    raise
             text = ""
             if resp.choices:
-                text = (resp.choices[0].message.content or "").strip()
+                raw = resp.choices[0].message.content or ""
+                stripper = _ThinkStripper()
+                text = (stripper.feed(raw) + stripper.flush()).strip()
             latency = int((time.perf_counter() - started) * 1000)
             preview = text[:200]
             return {"ok": True, "latency_ms": latency, "preview": preview}

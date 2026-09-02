@@ -8,6 +8,7 @@ import { $, scrollToBottom, escapeHtml } from "./utils.js";
 import { showToast } from "./toast.js";
 import { showConfirm } from "./confirm.js";
 import { renderMarkdown, enhanceCodeBlocks } from "./markdown.js";
+import { postSse, streamErrorText } from "./sse.js";
 import {
   showSlotView,
   showChatView,
@@ -159,248 +160,150 @@ export async function sendMessage() {
 
   let currentBubble = null;
   let bubbles = []; // [{el, role, fullContent, msgId, label}]
-  let idleCheck = null;
   let gotDone = false;      // 是否收到 done 事件
   let errorHandled = false; // 是否已显示错误提示
   let aborted = false;      // 本轮是否被取消/超时中断
+  let userMessageId = null;
 
   try {
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        slot_index: state.currentSlotIndex,
-        message: text,
-      }),
-      signal: state.abortController.signal,
-    });
-
-    if (!response.ok) {
-      let errMsg = `请求失败: ${response.status}`;
-      try {
-        const err = await response.json();
-        errMsg = err.message || errMsg;
-      } catch (_) { /* 忽略 */ }
-      throw new Error(errMsg);
-    }
-
-    const reader = response.body.getReader();
-    state.currentReader = reader;
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let lastChunkTime = Date.now();
-    const IDLE_TIMEOUT = 60_000;
-    idleCheck = setInterval(() => {
-      if (Date.now() - lastChunkTime > IDLE_TIMEOUT) {
-        state.abortController?.abort();
-        showToast("响应超时：长时间未收到数据", "error");
-        clearInterval(idleCheck);
-      }
-    }, 10_000);
-
-    let userMessageId = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (state.streamCancelled || done) {
-        clearInterval(idleCheck); idleCheck = null;
-        break;
-      }
-      lastChunkTime = Date.now();
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-
-        try {
-          const event = JSON.parse(line.slice(6));
-          const { type, content, code } = event;
-
-          switch (type) {
-            // ── 双模型：模型开始回复 ──
-            case "model_start": {
-              const name = event.name || "";
-              const icon = event.icon || "🤖";
-              currentBubble = addMessage("assistant", "", true, null,
-                icon ? `${icon} ${name}`.trim() : name);
-              bubbles.push({
-                el: currentBubble,
-                role: event.role,
-                fullContent: "",
-                msgId: null,
-                label: `${icon} ${name}`.trim(),
-              });
-              scrollToBottom();
-              break;
+    await postSse("/api/chat", {
+      slot_index: state.currentSlotIndex,
+      message: text,
+    }, (event) => {
+      const { type, content, code } = event;
+      switch (type) {
+        case "model_start": {
+          const name = event.name || "";
+          const icon = event.icon || "🤖";
+          currentBubble = addMessage("assistant", "", true, null,
+            icon ? `${icon} ${name}`.trim() : name);
+          bubbles.push({
+            el: currentBubble,
+            role: event.role,
+            fullContent: "",
+            msgId: null,
+            label: `${icon} ${name}`.trim(),
+          });
+          scrollToBottom();
+          break;
+        }
+        case "chunk": {
+          let entry = currentBubble ? bubbles[bubbles.length - 1] : null;
+          if (!entry) {
+            const bubble = addMessage("assistant", "", true);
+            entry = { el: bubble, role: null, fullContent: "", msgId: null, label: null };
+            bubbles.push(entry);
+            currentBubble = bubble;
+          }
+          entry.fullContent += content || "";
+          const contentDiv = getContent(entry.el);
+          if (contentDiv) contentDiv.textContent += content || "";
+          scrollToBottom();
+          break;
+        }
+        case "model_done": {
+          const entry = bubbles.find(b => b.role === event.role || b.el === currentBubble);
+          if (entry) {
+            entry.msgId = event.message_id;
+            if (event.message_id) {
+              const msgDiv = getMsgDiv(entry.el);
+              if (msgDiv) msgDiv.dataset.messageId = event.message_id;
             }
-
-            // ── 流式数据块 ──
-            case "chunk": {
-              let entry = null;
-              if (currentBubble) {
-                entry = bubbles[bubbles.length - 1];
-              }
-              if (!entry) {
-                // 单模型：首次 chunk 时创建气泡
-                const bubble = addMessage("assistant", "", true);
-                entry = { el: bubble, role: null, fullContent: "", msgId: null, label: null };
-                bubbles.push(entry);
-                currentBubble = bubble;
-              }
-              entry.fullContent += content;
+            const contentDiv = getContent(entry.el);
+            if (contentDiv) {
+              entry.el.dataset.rawContent = entry.fullContent;
+              contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+              enhanceCodeBlocks(contentDiv);
+            }
+            finishStreaming(entry.el);
+          }
+          currentBubble = null;
+          break;
+        }
+        case "done": {
+          gotDone = true;
+          if (event.dual) {
+            userMessageId = event.user_message_id;
+            if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
+            if (event.message_ids) {
+              bubbles.forEach((b, i) => {
+                if (event.message_ids[i]) {
+                  const d = getMsgDiv(b.el);
+                  if (d) d.dataset.messageId = event.message_ids[i];
+                }
+              });
+            }
+            if (userMessageId) {
+              bubbles.forEach((b) => {
+                attachRegenBtn(getMsgDiv(b.el), userMessageId);
+              });
+            }
+          } else {
+            userMessageId = event.user_message_id;
+            const assistantMessageId = event.assistant_message_id;
+            if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
+            const entry = bubbles[bubbles.length - 1];
+            if (entry && entry.el) {
+              const msgDiv = getMsgDiv(entry.el);
+              if (msgDiv && assistantMessageId) msgDiv.dataset.messageId = assistantMessageId;
               const contentDiv = getContent(entry.el);
               if (contentDiv) {
-                contentDiv.textContent += content;
+                entry.el.dataset.rawContent = entry.fullContent;
+                contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+                enhanceCodeBlocks(contentDiv);
               }
-              scrollToBottom();
-              break;
-            }
-
-            // ── 双模型：单个模型完成 ──
-            case "model_done": {
-              const entry = bubbles.find(b => b.role === event.role || b.el === currentBubble);
-              if (entry) {
-                entry.msgId = event.message_id;
-                if (event.message_id) {
-                  const msgDiv = getMsgDiv(entry.el);
-                  if (msgDiv) msgDiv.dataset.messageId = event.message_id;
-                }
-                const contentDiv = getContent(entry.el);
-                if (contentDiv) {
-                  entry.el.dataset.rawContent = entry.fullContent;
-                  contentDiv.innerHTML = renderMarkdown(entry.fullContent);
-                  enhanceCodeBlocks(contentDiv);
-                }
-                finishStreaming(entry.el);
+              finishStreaming(entry.el);
+              if (userMsgDiv && userMessageId) {
+                attachRegenBtn(msgDiv, userMessageId);
               }
-              currentBubble = null;
-              break;
-            }
-
-            // ── 完成事件 ──
-            case "done": {
-              gotDone = true;
-              if (event.dual) {
-                userMessageId = event.user_message_id;
-                if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
-
-                if (event.message_ids) {
-                  bubbles.forEach((b, i) => {
-                    if (event.message_ids[i]) {
-                      const d = getMsgDiv(b.el);
-                      if (d) d.dataset.messageId = event.message_ids[i];
-                    }
-                  });
-                }
-
-                // 双模型：给本轮各 assistant 消息加重试按钮（继续回复轮无用户消息 ID，跳过）
-                if (userMessageId) {
-                  bubbles.forEach((b) => {
-                    attachRegenBtn(getMsgDiv(b.el), userMessageId);
-                  });
-                }
-              } else {
-                // 单模型
-                userMessageId = event.user_message_id;
-                const assistantMessageId = event.assistant_message_id;
-                if (userMsgDiv && userMessageId) userMsgDiv.dataset.messageId = userMessageId;
-
-                const entry = bubbles[bubbles.length - 1];
-                if (entry && entry.el) {
-                  const msgDiv = getMsgDiv(entry.el);
-                  if (msgDiv && assistantMessageId) msgDiv.dataset.messageId = assistantMessageId;
-                  // 完成渲染
-                  const contentDiv = getContent(entry.el);
-                  if (contentDiv) {
-                    entry.el.dataset.rawContent = entry.fullContent;
-                    contentDiv.innerHTML = renderMarkdown(entry.fullContent);
-                    enhanceCodeBlocks(contentDiv);
-                  }
-                  finishStreaming(entry.el);
-
-                  // 给 assistant 消息加重试按钮
-                  if (userMsgDiv && userMessageId) {
-                    attachRegenBtn(msgDiv, userMessageId);
-                  }
-                }
-              }
-              loadSlots();
-              break;
-            }
-
-            // ── 错误处理 ──
-            case "error": {
-              errorHandled = true;
-              // 已有完成的模型气泡（已收到 model_done）且非补 Key 场景：
-              // 后端会保留用户消息与已完成回复，前端仅移除失败模型的未完成气泡
-              const completedBubbles = bubbles.filter(b => b.msgId);
-              const hasCompleted = completedBubbles.length > 0 &&
-                code !== "database_error";
-
-              if (hasCompleted) {
-                bubbles.forEach(b => {
-                  if (!b.msgId) {
-                    const d = getMsgDiv(b.el);
-                    if (d) d.remove();
-                  }
-                });
-                bubbles = bubbles.filter(b => b.msgId);
-                if (currentBubble) {
-                  const d = getMsgDiv(currentBubble);
-                  if (d) d.remove();
-                  currentBubble = null;
-                }
-                // 保留的用户消息气泡回写消息 ID，保证后续编辑/删除可用
-                if (userMsgDiv && event.user_message_id) {
-                  userMsgDiv.dataset.messageId = event.user_message_id;
-                }
-              } else {
-                bubbles.forEach(b => {
-                  if (b.el) {
-                    const d = getMsgDiv(b.el);
-                    if (d) d.remove();
-                  }
-                });
-                bubbles = [];
-                if (currentBubble) {
-                  const d = getMsgDiv(currentBubble);
-                  if (d) d.remove();
-                  currentBubble = null;
-                }
-                // 本轮失败，后端会回滚数据库；移除用户消息气泡保持视觉一致
-                if (userMsgDiv) userMsgDiv.remove();
-              }
-
-              {
-                const msgs = {
-                  auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
-                  missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
-                  unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
-                  rate_limited: "⏳ 请求过于频繁，请稍后重试",
-                  quota_exceeded: "💰 API 额度不足，请检查账户余额",
-                  ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
-                  config_error: "⚙️ 模型配置错误",
-                  database_error: "💾 存档写入失败，请稍后重试",
-                  network_error: "🔌 网络连接失败，请检查网络连接",
-                  timeout: "⏱️ 请求超时，请稍后重试",
-                  service_unavailable: "🛠️ 模型服务暂时不可用",
-                  permission_denied: "⛔ API 权限不足",
-                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
-                };
-                addErrorMessage(msgs[code] || `⚠️ ${content || "未知错误"}`, hasCompleted ? null : text);
-              }
-              break;
             }
           }
-        } catch (_) { /* 忽略解析错误 */ }
-      }
-    }
+          loadSlots();
+          break;
+        }
+        case "error": {
+          errorHandled = true;
+          const completedBubbles = bubbles.filter(b => b.msgId);
+          const hasCompleted = completedBubbles.length > 0 &&
+            code !== "database_error";
 
+          if (hasCompleted) {
+            bubbles.forEach(b => {
+              if (!b.msgId) {
+                const d = getMsgDiv(b.el);
+                if (d) d.remove();
+              }
+            });
+            bubbles = bubbles.filter(b => b.msgId);
+            if (currentBubble) {
+              const d = getMsgDiv(currentBubble);
+              if (d) d.remove();
+              currentBubble = null;
+            }
+            if (userMsgDiv && event.user_message_id) {
+              userMsgDiv.dataset.messageId = event.user_message_id;
+            }
+          } else {
+            bubbles.forEach(b => {
+              if (b.el) {
+                const d = getMsgDiv(b.el);
+                if (d) d.remove();
+              }
+            });
+            bubbles = [];
+            if (currentBubble) {
+              const d = getMsgDiv(currentBubble);
+              if (d) d.remove();
+              currentBubble = null;
+            }
+            if (userMsgDiv) userMsgDiv.remove();
+          }
+          addErrorMessage(streamErrorText(code, content), hasCompleted ? null : text);
+          break;
+        }
+      }
+    });
   } catch (e) {
-    if (idleCheck !== null) clearInterval(idleCheck);
     if (state.streamCancelled || e.name === "AbortError") {
       // 取消/超时：统一在 finally 中回滚本轮气泡并提示
       aborted = true;
@@ -432,25 +335,26 @@ export async function sendMessage() {
     }
   }
 
-  // 刷新存档数据
+  await refreshSlotAfterStream({ gotDone, errorHandled, aborted });
+  document.getElementById("message-input")?.focus();
+}
+
+async function refreshSlotAfterStream({ gotDone, errorHandled, aborted }) {
   if (state.currentSlotIndex !== null) {
     try {
       state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
       state.dualEnabled = state.currentSlotData.dual_enabled || false;
       state.responseMode = state.currentSlotData.response_mode || "both";
       state.firstModel = state.currentSlotData.first_model || "model1";
-      // 取消/超时后本轮气泡已由 rollbackMessages 回滚，跳过用 DB 数据重建
       if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
         renderMessages(state.currentSlotData.history || []);
       }
       updateSidebarInfo();
     } catch (_) { /* 静默失败 */ }
   }
-
   setStreaming(false);
   state.streamCancelled = false;
   state.currentReader = null;
-  document.getElementById("message-input")?.focus();
 }
 
 function rollbackMessages(text) {
@@ -516,7 +420,6 @@ export async function continueLastReply() {
   let gotDone = false;
   let errorHandled = false;
   let aborted = false;
-  let idleCheck = null;
 
   setStreaming(true);
   state.abortController = new AbortController();
@@ -525,97 +428,31 @@ export async function continueLastReply() {
   if (bubble) bubble.classList.add("streaming");
 
   try {
-    const response = await fetch(`/api/slots/${state.currentSlotIndex}/chat/continue`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      signal: state.abortController.signal,
+    await postSse(`/api/slots/${state.currentSlotIndex}/chat/continue`, {}, (event) => {
+      switch (event.type) {
+        case "chunk": {
+          fullContent += event.content || "";
+          contentDiv.textContent = fullContent;
+          scrollToBottom();
+          break;
+        }
+        case "done": {
+          gotDone = true;
+          bubble.dataset.rawContent = fullContent;
+          contentDiv.innerHTML = renderMarkdown(fullContent);
+          enhanceCodeBlocks(contentDiv);
+          break;
+        }
+        case "error": {
+          errorHandled = true;
+          contentDiv.innerHTML = renderMarkdown(originalText);
+          enhanceCodeBlocks(contentDiv);
+          addErrorMessage(streamErrorText(event.code, event.content));
+          break;
+        }
+      }
     });
-
-    if (!response.ok) {
-      let errMsg = `请求失败: ${response.status}`;
-      try {
-        const err = await response.json();
-        errMsg = err.message || errMsg;
-      } catch (_) { /* 忽略 */ }
-      throw new Error(errMsg);
-    }
-
-    const reader = response.body.getReader();
-    state.currentReader = reader;
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let lastChunkTime = Date.now();
-    const IDLE_TIMEOUT = 60_000;
-    idleCheck = setInterval(() => {
-      if (Date.now() - lastChunkTime > IDLE_TIMEOUT) {
-        state.abortController?.abort();
-        showToast("响应超时：长时间未收到数据", "error");
-        clearInterval(idleCheck);
-      }
-    }, 10_000);
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (state.streamCancelled || done) {
-        clearInterval(idleCheck); idleCheck = null;
-        break;
-      }
-      lastChunkTime = Date.now();
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-          switch (event.type) {
-            case "chunk": {
-              fullContent += event.content || "";
-              contentDiv.textContent = fullContent;
-              scrollToBottom();
-              break;
-            }
-            case "done": {
-              gotDone = true;
-              bubble.dataset.rawContent = fullContent;
-              contentDiv.innerHTML = renderMarkdown(fullContent);
-              enhanceCodeBlocks(contentDiv);
-              break;
-            }
-            case "error": {
-              errorHandled = true;
-              // 后端尚未落库，恢复原内容并提示
-              contentDiv.innerHTML = renderMarkdown(originalText);
-              enhanceCodeBlocks(contentDiv);
-              {
-                const msgsMap = {
-                  auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
-                  missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
-                  unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
-                  rate_limited: "⏳ 请求过于频繁，请稍后重试",
-                  quota_exceeded: "💰 API 额度不足，请检查账户余额",
-                  ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
-                  config_error: "⚙️ 模型配置错误",
-                  database_error: "💾 存档写入失败，请稍后重试",
-                  network_error: "🔌 网络连接失败，请检查网络连接",
-                  timeout: "⏱️ 请求超时，请稍后重试",
-                  service_unavailable: "🛠️ 模型服务暂时不可用",
-                  permission_denied: "⛔ API 权限不足",
-                  slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
-                };
-                addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
-              }
-              break;
-            }
-          }
-        } catch (_) { /* 忽略解析错误 */ }
-      }
-    }
   } catch (e) {
-    if (idleCheck !== null) clearInterval(idleCheck);
     if (state.streamCancelled || e.name === "AbortError") {
       aborted = true;
     } else {
@@ -636,34 +473,16 @@ export async function continueLastReply() {
     finishStreaming(bubble);
   }
 
-  // 刷新存档数据
-  if (state.currentSlotIndex !== null) {
-    try {
-      state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
-      state.dualEnabled = state.currentSlotData.dual_enabled || false;
-      state.responseMode = state.currentSlotData.response_mode || "both";
-      state.firstModel = state.currentSlotData.first_model || "model1";
-      // 流异常结束（未收到 done/error）时用 DB 数据重建，保证前后端一致
-      if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
-        renderMessages(state.currentSlotData.history || []);
-      }
-      updateSidebarInfo();
-    } catch (_) { /* 静默失败 */ }
-  }
-
-  setStreaming(false);
-  state.streamCancelled = false;
-  state.currentReader = null;
+  await refreshSlotAfterStream({ gotDone, errorHandled, aborted });
 }
 
 /** 双模型「继续」：跳过用户消息，两个模型按 response_mode / first_model 正常回复一轮 */
 async function continueDualTurn() {
-  let bubbles = [];       // [{el, role, fullContent, msgId}]
+  let bubbles = [];
   let currentBubble = null;
   let gotDone = false;
   let errorHandled = false;
   let aborted = false;
-  let idleCheck = null;
 
   const removeNewBubbles = () => {
     bubbles.forEach((b) => {
@@ -684,145 +503,77 @@ async function continueDualTurn() {
   state.currentReader = null;
 
   try {
-    const response = await fetch(`/api/slots/${state.currentSlotIndex}/chat/continue`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      signal: state.abortController.signal,
-    });
-
-    if (!response.ok) {
-      let errMsg = `请求失败: ${response.status}`;
-      try {
-        const err = await response.json();
-        errMsg = err.message || errMsg;
-      } catch (_) { /* 忽略 */ }
-      throw new Error(errMsg);
-    }
-
-    const reader = response.body.getReader();
-    state.currentReader = reader;
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let lastChunkTime = Date.now();
-    const IDLE_TIMEOUT = 60_000;
-    idleCheck = setInterval(() => {
-      if (Date.now() - lastChunkTime > IDLE_TIMEOUT) {
-        state.abortController?.abort();
-        showToast("响应超时：长时间未收到数据", "error");
-        clearInterval(idleCheck);
-      }
-    }, 10_000);
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (state.streamCancelled || done) {
-        clearInterval(idleCheck); idleCheck = null;
-        break;
-      }
-      lastChunkTime = Date.now();
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-          switch (event.type) {
-            // 模型开始回复：新建气泡
-            case "model_start": {
-              const icon = event.icon || "🤖";
-              const name = event.name || "";
-              const label = `${icon} ${name}`.trim();
-              currentBubble = addMessage("assistant", "", true, null, label);
-              bubbles.push({ el: currentBubble, role: event.role, fullContent: "", msgId: null });
-              scrollToBottom();
-              break;
+    await postSse(`/api/slots/${state.currentSlotIndex}/chat/continue`, {}, (event) => {
+      switch (event.type) {
+        case "model_start": {
+          const icon = event.icon || "🤖";
+          const name = event.name || "";
+          const label = `${icon} ${name}`.trim();
+          currentBubble = addMessage("assistant", "", true, null, label);
+          bubbles.push({ el: currentBubble, role: event.role, fullContent: "", msgId: null });
+          scrollToBottom();
+          break;
+        }
+        case "chunk": {
+          const entry = currentBubble ? bubbles[bubbles.length - 1] : null;
+          if (!entry) break;
+          entry.fullContent += event.content || "";
+          const contentDiv = getContent(entry.el);
+          if (contentDiv) contentDiv.textContent = entry.fullContent;
+          scrollToBottom();
+          break;
+        }
+        case "model_done": {
+          const entry = bubbles.find((b) => b.role === event.role || b.el === currentBubble);
+          if (entry) {
+            entry.msgId = event.message_id;
+            if (event.message_id) {
+              const msgDiv = getMsgDiv(entry.el);
+              if (msgDiv) msgDiv.dataset.messageId = event.message_id;
             }
-            // 流式数据块
-            case "chunk": {
-              let entry = currentBubble ? bubbles[bubbles.length - 1] : null;
-              if (!entry) break;
-              entry.fullContent += event.content || "";
-              const contentDiv = getContent(entry.el);
-              if (contentDiv) contentDiv.textContent = entry.fullContent;
-              scrollToBottom();
-              break;
+            const contentDiv = getContent(entry.el);
+            if (contentDiv) {
+              entry.el.dataset.rawContent = entry.fullContent;
+              contentDiv.innerHTML = renderMarkdown(entry.fullContent);
+              enhanceCodeBlocks(contentDiv);
             }
-            // 单个模型完成
-            case "model_done": {
-              const entry = bubbles.find((b) => b.role === event.role || b.el === currentBubble);
-              if (entry) {
-                entry.msgId = event.message_id;
-                if (event.message_id) {
-                  const msgDiv = getMsgDiv(entry.el);
-                  if (msgDiv) msgDiv.dataset.messageId = event.message_id;
-                }
-                const contentDiv = getContent(entry.el);
-                if (contentDiv) {
-                  entry.el.dataset.rawContent = entry.fullContent;
-                  contentDiv.innerHTML = renderMarkdown(entry.fullContent);
-                  enhanceCodeBlocks(contentDiv);
-                }
-                finishStreaming(entry.el);
-              }
-              currentBubble = null;
-              break;
-            }
-            // 完成事件
-            case "done": {
-              gotDone = true;
-              if (event.message_ids) {
-                bubbles.forEach((b, i) => {
-                  if (event.message_ids[i]) {
-                    const d = getMsgDiv(b.el);
-                    if (d) d.dataset.messageId = event.message_ids[i];
-                  }
-                });
-              }
-              break;
-            }
-            // 错误处理
-            case "error": {
-              errorHandled = true;
-              bubbles.forEach((b) => {
-                if (!b.msgId) {
-                  const d = getMsgDiv(b.el);
-                  if (d) d.remove();
-                }
-              });
-              bubbles = bubbles.filter((b) => b.msgId);
-              if (currentBubble) {
-                const d = getMsgDiv(currentBubble);
-                if (d) d.remove();
-                currentBubble = null;
-              }
-              const msgsMap = {
-                auth_failed: "🔑 API 认证失败，请到右上角「模型配置」检查该供应商的密钥",
-                missing_api_key: "🔑 密钥未配置，请到「模型配置」填写密钥或环境变量",
-                unknown_model: "⚙️ 模型已不存在，请更换模型或在「模型配置」中重新添加",
-                rate_limited: "⏳ 请求过于频繁，请稍后重试",
-                quota_exceeded: "💰 API 额度不足，请检查账户余额",
-                ollama_unreachable: "🔌 无法连接到 Ollama 服务，请确认已启动",
-                config_error: "⚙️ 模型配置错误",
-                database_error: "💾 存档写入失败，请稍后重试",
-                network_error: "🔌 网络连接失败，请检查网络连接",
-                timeout: "⏱️ 请求超时，请稍后重试",
-                service_unavailable: "🛠️ 模型服务暂时不可用",
-                permission_denied: "⛔ API 权限不足",
-                slot_busy: "⏳ 该存档正在生成回复，请稍后重试",
-              };
-              addErrorMessage(msgsMap[event.code] || `⚠️ ${event.content || "未知错误"}`);
-              break;
-            }
+            finishStreaming(entry.el);
           }
-        } catch (_) { /* 忽略解析错误 */ }
+          currentBubble = null;
+          break;
+        }
+        case "done": {
+          gotDone = true;
+          if (event.message_ids) {
+            bubbles.forEach((b, i) => {
+              if (event.message_ids[i]) {
+                const d = getMsgDiv(b.el);
+                if (d) d.dataset.messageId = event.message_ids[i];
+              }
+            });
+          }
+          break;
+        }
+        case "error": {
+          errorHandled = true;
+          bubbles.forEach((b) => {
+            if (!b.msgId) {
+              const d = getMsgDiv(b.el);
+              if (d) d.remove();
+            }
+          });
+          bubbles = bubbles.filter((b) => b.msgId);
+          if (currentBubble) {
+            const d = getMsgDiv(currentBubble);
+            if (d) d.remove();
+            currentBubble = null;
+          }
+          addErrorMessage(streamErrorText(event.code, event.content));
+          break;
+        }
       }
-    }
+    });
   } catch (e) {
-    if (idleCheck !== null) clearInterval(idleCheck);
     if (state.streamCancelled || e.name === "AbortError") {
       aborted = true;
     } else {
@@ -837,24 +588,7 @@ async function continueDualTurn() {
     }
   }
 
-  // 刷新存档数据
-  if (state.currentSlotIndex !== null) {
-    try {
-      state.currentSlotData = await apiGet(`/api/slots/${state.currentSlotIndex}/chat`);
-      state.dualEnabled = state.currentSlotData.dual_enabled || false;
-      state.responseMode = state.currentSlotData.response_mode || "both";
-      state.firstModel = state.currentSlotData.first_model || "model1";
-      // 流异常结束（未收到 done/error）时用 DB 数据重建，保证前后端一致
-      if (!gotDone && !errorHandled && !state.streamCancelled && !aborted) {
-        renderMessages(state.currentSlotData.history || []);
-      }
-      updateSidebarInfo();
-    } catch (_) { /* 静默失败 */ }
-  }
-
-  setStreaming(false);
-  state.streamCancelled = false;
-  state.currentReader = null;
+  await refreshSlotAfterStream({ gotDone, errorHandled, aborted });
 }
 
 // ── 重新生成（单/双模型通用） ──
@@ -877,7 +611,9 @@ export async function regenerate(userMsgId) {
     showToast("无法找到用户消息内容", "error");
     return;
   }
-  const userText = userBubble.textContent || "";
+  const userText = userBubble.dataset.rawContent
+    || userBubble.querySelector(".bubble-content")?.textContent
+    || "";
 
   try {
     await apiDelete(`/api/slots/${state.currentSlotIndex}/chat/messages`, { from_id: userMsgId });
@@ -925,7 +661,9 @@ export function editAndResend(msgElement) {
   const bubble = msgElement.querySelector(".bubble");
   if (!bubble) return;
 
-  const originalText = bubble.textContent;
+  const originalText = bubble.dataset.rawContent
+    || bubble.querySelector(".bubble-content")?.textContent
+    || "";
   if (!originalText) return;
 
   const textarea = document.createElement("textarea");

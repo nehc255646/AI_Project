@@ -150,7 +150,7 @@ class SlotManager:
                         slot_id INT NOT NULL,
                         role VARCHAR(16) NOT NULL,
                         source VARCHAR(16) NOT NULL DEFAULT '',
-                        content TEXT,
+                        content MEDIUMTEXT,
                         created_at VARCHAR(32) DEFAULT '',
                         FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE,
                         INDEX idx_slot_id (slot_id)
@@ -177,6 +177,14 @@ class SlotManager:
                         "ALTER TABLE `slots` MODIFY COLUMN `model` VARCHAR(192) NOT NULL DEFAULT ''"
                     )
                     logger.info("已扩展 slots.model 为 VARCHAR(192)")
+                cursor.execute("SHOW COLUMNS FROM `messages` LIKE 'content'")
+                content_col = cursor.fetchone()
+                content_type = str((content_col or {}).get("Type", "")).lower()
+                if content_col and "mediumtext" not in content_type and "longtext" not in content_type:
+                    cursor.execute(
+                        "ALTER TABLE `messages` MODIFY COLUMN `content` MEDIUMTEXT"
+                    )
+                    logger.info("已扩展 messages.content 为 MEDIUMTEXT")
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS providers (
                         id INT AUTO_INCREMENT PRIMARY KEY,
